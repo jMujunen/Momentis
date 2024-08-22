@@ -125,9 +125,9 @@ def main(video: str | Path) -> None:
     def update_clip_range(point: str) -> None:
         # Update the clip range based on the selected point
         if point == "start":
-            start_frame = timeline_slider.value()
+            timeline_slider.value()
         elif point == "end":
-            end_frame = timeline_slider.value()
+            timeline_slider.value()
 
 
 if __name__ == "__main__":

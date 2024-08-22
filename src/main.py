@@ -81,9 +81,8 @@ def main(path: str):
     start_frame = 0
     end_frame = frame_count - 1
     pool = Pool()
-    frames_of_interest = []
     # Iterate through the video frames
-    with ProgressBar(frame_count) as progress:
+    with ProgressBar(frame_count):
         for result in pool.execute(callback, range(frame_count), frame_count, fps, cap):
             # Get the start and end frames for this frame
             # frames_of_interest.append(result)
@@ -128,7 +127,7 @@ def main(path: str):
     print(len(final_clip))
     # Save the final clip to a new video file
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out = cv2.VideoWriter("output.mp4", fourcc, fps, (width, height))
+    out = cv2.VideoWriter("out.mp4", fourcc, fps, (width, height))
     for frame in final_clip:
         out.write(frame)
     out.release()

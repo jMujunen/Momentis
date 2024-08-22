@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
+import argparse
 import cv2
 import numpy as np
 import pytesseract
@@ -71,3 +71,5 @@ def trim_video(mp4_input_path, mp4_output_path, wav_path):
 
     cap.release()
     out.release()
+
+def parse_args() -> argparse.Namespace:
