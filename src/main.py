@@ -5,6 +5,7 @@ import os
 
 import cv2
 import ExecutionTimer
+import numpy as np
 import pytesseract
 from Color import cprint, fg
 from fsutils import Dir
@@ -19,23 +20,17 @@ WRITER_FPS = 60
 BUFFER = 120
 # List of keywords related to kill feeds
 KEYWORDS = [
-    # "Hoffman",
-    # "itsgroovybabe",
-    # "Mesofunny",
-    # "Bartarded",
+    "knocked",
+    "killed",
     "you",
 ]
 
 
-def name_in_killfeed(img: ndarray) -> bool:  # , cuda_image: cv2.cuda.GpuMat) -> bool:
+def name_in_killfeed(img: ndarray) -> bool:
     """Check if a kill-related keyword is present in the text extracted from an image frame."""
-    # cuda_image.upload(img)
     gray_frame = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, threshold = cv2.threshold(gray_frame, 150, 255, cv2.THRESH_BINARY)
-    # Download image from GPU to CPU
-    # cpu_threshold = threshold.download()
     text = pytesseract.image_to_string(threshold)
-
     # Check if any kill-related keyword is present in the extracted text
     return any(keyword.lower() in text.lower() for keyword in KEYWORDS)
 

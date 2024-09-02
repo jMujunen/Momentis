@@ -14,8 +14,9 @@ class FrameBuffer:
         """
         self.max_size = max_size
         self.buffer = deque(maxlen=max_size)
+        self.index = deque(maxlen=max_size)
 
-    def add_frame(self, frame: ndarray) -> None:
+    def add_frame(self, frame: tuple[ndarray, int]) -> None:
         """
         Add a new frame to the buffer.
 
@@ -48,7 +49,7 @@ class FrameBuffer:
         """
         if num_frames > len(self.buffer):
             num_frames = len(self.buffer)
-        return list(self.buffer)[-num_frames:]
+        return list(self.buffer)[num_frames:]
 
     def get_future_frames(self, num_frames: int) -> list[ndarray]:
         """
