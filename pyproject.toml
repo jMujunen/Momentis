@@ -7,10 +7,11 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-opencv-contrib-python = {path = "/home/joona/Downloads/opencv_contrib_python-4.10.0.84-cp37-abi3-linux_x86_64.whl"}
+opencv-contrib-python = {path = "/home/joona/opencv-cuda/opencv_contrib_python-4.10.0.84-cp37-abi3-linux_x86_64.whl"}
 PyQt6 = "^6.7.1"
 librosa = "^0.10.2.post1"
 imutils = "^0.5.4"
+pyqt5 = "^5.15.11"
 
 [tool.pyright]
 exclude = ["build", "dist"]
