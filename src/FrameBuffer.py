@@ -47,8 +47,7 @@ class FrameBuffer:
         -----------------
             - `num_frames (int)`: The number of recent frames to return.
         """
-        if num_frames > len(self.buffer):
-            num_frames = len(self.buffer)
+        num_frames = min(num_frames, len(self.buffer))
         return list(self.buffer)[num_frames:]
 
     def get_future_frames(self, num_frames: int) -> list[ndarray]:
@@ -59,8 +58,7 @@ class FrameBuffer:
         -----------------
             - `num_frames (int)`: The number of older frames to return.
         """
-        if num_frames > len(self.buffer):
-            num_frames = len(self.buffer)
+        num_frames = min(num_frames, len(self.buffer))
         return list(self.buffer)[:num_frames]
 
     def release(self) -> None:
