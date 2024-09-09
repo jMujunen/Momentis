@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a new new video containing only relevant frames determined by the killfeed"""
+"""Create a new new video containing only relevant frames determined by the killfeed."""
 
 import argparse
 import os
@@ -21,7 +21,8 @@ BUFFER = 240
 # List of keywords related to kill feeds
 KEYWORDS = {
     "hoff": [
-        "sofunny, meso",
+        "sofunny",
+        "meso",
         "solunny",
         "hoff",
         "ffman" "bartard",
@@ -39,7 +40,7 @@ DATE_EXTRACTOR = re.compile(
 
 
 def file_sanatizer(filename: str) -> str:
-    """Sanitize a filename to remove illegal characters"""
+    """Sanitize a filename to remove illegal characters."""
     matches = DATE_EXTRACTOR.findall(filename)
     if matches and len(matches[0]) == 9:
         prefix, year, month, day, hour, minute, second, ms, ext = matches[0]
@@ -50,7 +51,7 @@ def file_sanatizer(filename: str) -> str:
 
 
 def name_in_killfeed(img: ndarray, rio: tuple, keywords: list[str]) -> tuple[bool, str]:
-    """Check if a kill-related keyword is present in the text extracted from the ndarray
+    """Check if a kill-related keyword is present in the text extracted from the ndarray.
 
     Parameters:
     -----------
@@ -68,8 +69,7 @@ def name_in_killfeed(img: ndarray, rio: tuple, keywords: list[str]) -> tuple[boo
     # Check if any kill-related keyword is present in the extracted text
     if any(keyword.lower() in text.lower() for keyword in keywords):
         return True, text.lower()
-    else:
-        return False, text.lower()
+    return False, text.lower()
 
 
 def detect_frames(
@@ -78,7 +78,7 @@ def detect_frames(
     buffer: FrameBuffer,
     keywords: list[str],
 ) -> list[str]:
-    """Create a new video with frames that contain <keywords>
+    """Create a new video with frames that contain <keywords>.
 
     Parameters:
     -----------
@@ -91,17 +91,18 @@ def detect_frames(
     - `log` (list): A Debug log
     """
     log = []
-    log_template = "{} - {} {}"  # <LOG-LEVEL> - <MESSAGE TEXT> <CURRENT FRAME>
+    log_template = "[{}] {} - Frame {}"  # <LOG-LEVEL> - <MESSAGE TEXT> <CURRENT FRAME>
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         msg = log_template.format("ERROR", "Failed to open ", video_path)
         cprint(msg, fg.red)
         log.append(msg)
+        cap.release()
         return log
 
     # Extract vars from video
     count = 0
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
     fps = cap.get(cv2.CAP_PROP_FPS)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -135,7 +136,7 @@ def detect_frames(
                 for buffered_frame, index in buffer.get_frames():
                     # This is a check to ensure that we don't write duplicate frames
                     if index not in written_frames:
-                        msg = log_template.format("[WRITE]", "Wrote frame", index)  # DEBUG
+                        msg = log_template.format("WRITE", "Wrote frame", index)  # DEBUG
                         cprint(msg, fg.green, end="\r")  # DEBUG
                         log.append(msg)  # DEBUG
                         out.write(buffered_frame)
@@ -144,16 +145,16 @@ def detect_frames(
                         # cv2.imshow("FRAME", buffered_frame)
                     # Debug logging
                     else:
-                        msg = log_template.format("[SKIPPED]", "Duplicate frame", index)  # DEBUG
+                        msg = log_template.format("SKIPPED", "Duplicate frame", index)  # DEBUG
                         # print(msg, end="\r")  # DEBUG
                         log.append(msg)  # DEBUG
             # Debug logging
             else:
-                msg = log_template.format("[SKIPPED]", "No kill", count)  # DEBUG
+                msg = log_template.format("SKIPPED", "No kill", count)  # DEBUG
                 log.append("\t".join([msg, name]))  # DEBUG
         # Debug logging
         else:
-            msg = log_template.format("[INFO]", "Current frame", count)  # DEBUG
+            msg = log_template.format("INFO", "Current", count)  # DEBUG
             log.append(msg)  # DEBUG
 
         # # DEBUG
@@ -178,12 +179,12 @@ def detect_frames(
 
 
 def main(input_path: str, keywords: list[str], debug: bool) -> None:
-    """Main function to process all videos
+    """Process all videos in `input_paht`.
 
     Parameters:
     ------------
         - `input_path (str)` : path to input videos folder
-        - `keywords (list[str])` : list of keywords to search for in killfeed messages
+        - `keywords (liststr)` : list of keywords to search for in killfeed messages
         - `debug (bool)` : whether or not to print debug information
     """
 
@@ -201,17 +202,17 @@ def main(input_path: str, keywords: list[str], debug: bool) -> None:
     buffer = FrameBuffer(BUFFER)
     for vid in tqdm(videos, desc="Processing Videos"):
         # File path definitions
-        output_video = os.path.join(output_folder, f"cv2_{vid.basename}")
+        output_video = os.path.join(output_folder, f"cv2_{vid.filename}")
         log = detect_frames(vid.path, output_video, buffer, keywords)
         # Write debug information to file
         if debug:
-            with open(os.path.join(log_folder, f"cv2_{vid.basename}.log"), "w") as logfile:
+            with open(os.path.join(log_folder, f"cv2_{vid.filename}.log"), "w") as logfile:
                 logfile.write("\n".join(log))
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=__doc__, usage=f"./main.py [OPTIONS] PATH { {'|'.join(KEYWORDS.keys())}}"
+        description=__doc__, usage=f"./main.py OPTIONS PATH { {'|'.join(KEYWORDS.keys())}}"
     )
     parser.add_argument(
         "PATH",
