@@ -73,10 +73,7 @@ def name_in_killfeed(img: ndarray, rio: tuple, keywords: list[str]) -> tuple[boo
 
 
 def detect_frames(
-    video_path: str,
-    output_video_path: str,
-    buffer: FrameBuffer,
-    keywords: list[str],
+    vid_path: str, output_path: str, buffer: FrameBuffer, keywords: list[str]
 ) -> list[str]:
     """Create a new video with frames that contain <keywords>.
 
@@ -92,9 +89,9 @@ def detect_frames(
     """
     log = []
     log_template = "[{}] {} - Frame {}"  # <LOG-LEVEL> - <MESSAGE TEXT> <CURRENT FRAME>
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(vid_path)
     if not cap.isOpened():
-        msg = log_template.format("ERROR", "Failed to open ", video_path)
+        msg = log_template.format("ERROR", "Failed to open ", vid_path)
         cprint(msg, fg.red)
         log.append(msg)
         cap.release()
@@ -102,7 +99,7 @@ def detect_frames(
 
     # Extract vars from video
     count = 0
-    cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
+    cap = cv2.VideoCapture(vid_path, cv2.CAP_FFMPEG)
     fps = cap.get(cv2.CAP_PROP_FPS)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -112,7 +109,7 @@ def detect_frames(
 
     # Define output video writer object
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore
-    out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
     # Temporary placeholder vars
     kill_detected = False
