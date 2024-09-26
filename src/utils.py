@@ -10,12 +10,35 @@ from moviepy.config import change_settings
 from moviepy.editor import AudioFileClip, ImageSequenceClip
 from numpy import ndarray
 
+from config import BUFFER, DATE_EXTRACTOR, FPS, INTERVAL, ROI
 from FrameBuffer import FrameBuffer
-
-from .config import BUFFER, DATE_EXTRACTOR, FPS, INTERVAL, ROI
 
 # Change settings to use ffmpeg directly
 change_settings({"IMAGEMAGICK_BINARY": "ffmpeg"})
+
+
+def name_in_killfeed(
+    img: ndarray, keywords: list[str], roi: tuple[int, ...] | None = None
+) -> tuple[bool, str]:
+    """Check if a kill-related keyword is present in the text extracted from the ndarray.
+
+    Parameters:
+    -----------
+        - `img (ndarray)` : The image to extract text from
+        - `rio (tuple)` : The region of interest to extract text from
+
+    """
+    if roi is not None:
+        x, y, w, h = roi
+        # Crop the frame to the region of interest (rio)
+        img = img[y : y + h, x : x + w]
+    gray_frame = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    _, threshold = cv2.threshold(gray_frame, 100, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    text = pytesseract.image_to_string(threshold, lang="eng")
+    # Check if any kill-related keyword is present in the extracted text
+    if any(keyword.lower() in text.lower() for keyword in keywords):
+        return True, text.lower()
+    return False, text.lower()
 
 
 def file_sanatizer(filename: str) -> str:
@@ -181,30 +204,6 @@ def create_frame_index(
     return frame_index
 
 
-def name_in_killfeed(
-    img: ndarray, keywords: list[str], rio: tuple[int, int, int, int] | None = None
-) -> tuple[bool, str]:
-    """Check if a kill-related keyword is present in the text extracted from the ndarray.
-
-    Parameters:
-    -----------
-        - `img (ndarray)` : The image to extract text from
-        - `rio (tuple)` : The region of interest to extract text from
-
-    """
-    if rio is not None:
-        x, y, w, h = rio
-        # Crop the frame to the region of interest (rio)
-        img = img[y : y + h, x : x + w]
-    gray_frame = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    _, threshold = cv2.threshold(gray_frame, 100, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    text = pytesseract.image_to_string(threshold, lang="eng")
-    # Check if any kill-related keyword is present in the extracted text
-    if any(keyword.lower() in text.lower() for keyword in keywords):
-        return True, text.lower()
-    return False, text.lower()
-
-
 def video_to_ndarray(video_path: str, keywords: list[str], buffer: FrameBuffer) -> list[ndarray]:
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -226,7 +225,7 @@ def video_to_ndarray(video_path: str, keywords: list[str], buffer: FrameBuffer) 
         if count % INTERVAL == 0:
             kill_detected, name = name_in_killfeed(frame, keywords)
             if kill_detected is True:
-                cprint(f"f'{"Kill detected: {name}}:<100"}'", fg.green)
+                cprint(f"{f'Kill detected @ frame {count}", fg.green':>100}", end="\r")
                 # Write the past <CONSTS["INTERVAL"]> frames to the output video
                 for buffered_frame, index in buffer.get_frames():
                     # Check to ensure that we don't write duplicate frames

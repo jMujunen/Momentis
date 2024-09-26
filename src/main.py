@@ -9,15 +9,17 @@ from Color import cprint, fg, style
 from fsutils import Dir
 from ProgressBar import ProgressBar
 
-from FrameBuffer import FrameBuffer
-
-from .config import (
+from config import (
+    BUFFER,
     FPS as WRITER_FPS,
     INTERVAL,
     KEYWORDS,
     ROI,
 )
-from .utils import name_in_killfeed
+from FrameBuffer import FrameBuffer
+from utils import name_in_killfeed
+
+ROI_W, ROI_H = ROI
 
 
 def detect_frames(
@@ -45,13 +47,15 @@ def detect_frames(
         cap.release()
         return log
 
-    # Extract vars from video(\w+)\s=\sR
+    # Extract vars from video
     count = 0
     cap = cv2.VideoCapture(vid_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
+    x, y = width - ROI_H, height - ROI_H
+    roi = x, y, ROI_W, ROI_H
     # Define output video writer object
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
@@ -67,12 +71,12 @@ def detect_frames(
             break
 
         buffer.add_frame((frame, count))
-        # Check for killfeed every <CONSTS["INTERVAL"]> frames instead of each frame to save time/resources
-        if count % CONSTS["INTERVAL"] == 0:
-            kill_detected, name = name_in_killfeed(frame, keywords)
+        # Check for killfeed every <INTERVAL> frames instead of each frame, to save time/resources
+        if count % INTERVAL == 0:
+            kill_detected, name = name_in_killfeed(frame, keywords, ())
             if kill_detected is True:
                 msg = log_template.format("DETECT", "Kill found @", count)  # DEBUG
-                print(f"{msg:>60}", end="\r")  # DEBUG
+                print(f"{msg:>100}", end="\r")  # DEBUG
                 log.append("\t".join([msg, name]))  # DEBUG
                 # Write the past <CONSTS["INTERVAL"]> frames to the output video
                 for buffered_frame, index in buffer.get_frames():
@@ -81,7 +85,7 @@ def detect_frames(
                         msg = log_template.format(
                             f"{fg.green}WRITE{style.reset}", "Wrote frame", index
                         )  # DEBUG
-                        cprint(msg, fg.green, end="\r")  # DEBUG
+                        cprint(f"{msg:>100}", fg.green, end="\r")  # DEBUG
                         log.append(msg)  # DEBUG
                         out.write(buffered_frame)
                         written_frames.append(index)
@@ -96,12 +100,12 @@ def detect_frames(
             else:
                 msg = log_template.format("SKIPPED", "No kill", count)  # DEBUG
                 log.append("\t".join([msg, name]))  # DEBUG
-                print(f"{msg:60}", end="\r")  # DEBUG
+                print(f"{msg:>100}", end="\r")  # DEBUG
         # Debug logging
         else:
             msg = log_template.format("INFO", "Current", count)  # DEBUG
             log.append(msg)  # DEBUG
-            # print(msg, end="\r")  # DEBUG
+            print(f"{msg:<40}", end="\r")  # DEBUG
 
         # # DEBUG
         # cv2.putText(
@@ -143,8 +147,8 @@ def main(input_path: str, keywords: list[str], debug: bool) -> None:
     os.makedirs(log_folder, exist_ok=True)
     # Create a buffer of size BUFFER to store frames temporarily
     # <BUFFER> determines the how the number of frames to write prior to killfeed being detected
-    buffer = FrameBuffer(CONSTS["BUFFER"])
-    pb = ProgressBar(len(videos))
+    buffer = FrameBuffer(BUFFER)
+    # pb = ProgressBar(len(videos))
     for vid in videos:
         # File path definitions
         output_video = os.path.join(output_folder, f"cv2_{vid.basename}")
@@ -158,7 +162,7 @@ def main(input_path: str, keywords: list[str], debug: bool) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=__doc__,
-        usage=f"./main.py OPTIONS PATH { {'|'.join(CONSTS["KEYWORDS"].keys())}}",
+        usage=f"./main.py OPTIONS PATH { {'|'.join(KEYWORDS.keys())}}",
     )
     parser.add_argument(
         "PATH",
@@ -167,7 +171,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--keywords",
-        choices=CONSTS["KEYWORDS"].keys(),
+        choices=KEYWORDS.keys(),
         help="Keywords to search for",
         type=str,
         # default=KEYWORDS["hoff"],
@@ -183,6 +187,6 @@ def parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args()
     print(args)
-    keywords = CONSTS["KEYWORDS"][args.keywords]
+    keywords = KEYWORDS[args.keywords]
     print(keywords)
     main(args.PATH, keywords, args.debug)
