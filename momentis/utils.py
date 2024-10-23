@@ -1,17 +1,18 @@
 import os
 import re
 from datetime import timedelta
+from typing import Any
 
 import cv2
+import cython
 import numpy as np
 import pytesseract
 from Color import cprint, fg, style
+from config import BUFFER, DATE_EXTRACTOR, FPS, INTERVAL, ROI
+from FrameBuffer import FrameBuffer
 from moviepy.config import change_settings
 from moviepy.editor import AudioFileClip, ImageSequenceClip
 from numpy import ndarray
-
-from config import BUFFER, DATE_EXTRACTOR, FPS, INTERVAL, ROI
-from FrameBuffer import FrameBuffer
 
 # Change settings to use ffmpeg directly
 change_settings({"IMAGEMAGICK_BINARY": "ffmpeg"})
@@ -22,7 +23,7 @@ def name_in_killfeed(
 ) -> tuple[bool, str]:
     """Check if a kill-related keyword is present in the text extracted from the ndarray.
 
-    Parameters:
+    Parameters
     -----------
         - `img (ndarray)` : The image to extract text from
         - `rio (tuple)` : The region of interest to extract text from
@@ -34,9 +35,13 @@ def name_in_killfeed(
         img = img[y : y + h, x : x + w]
     gray_frame = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, threshold = cv2.threshold(gray_frame, 100, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    _2, threshold2 = cv2.threshold(gray_frame, 175, 255, cv2.THRESH_BINARY)
     text = pytesseract.image_to_string(threshold, lang="eng")
+    text2 = pytesseract.image_to_string(threshold2, lang="eng")
+    concatted_text = "\n".join([text, text2])
+    # cv2.imshow("threshold", threshold)
     # Check if any kill-related keyword is present in the extracted text
-    if any(keyword.lower() in text.lower() for keyword in keywords):
+    if any(keyword.lower() in concatted_text.lower() for keyword in keywords):
         return True, text.lower()
     return False, text.lower()
 
@@ -66,10 +71,9 @@ def format_timedelta(td: timedelta) -> str:
 
 
 def video_from_frames(frame_list: list[np.ndarray], video_path: str, output_path: str) -> None:
-    """
-    Write frames to a video file using OpenCV's VideoWriter class.
+    """Write frames to a video file using OpenCV's VideoWriter class.
 
-    Parameters:
+    Parameters
     ----------
         - `frame_list (list[np.ndarray])` : list of frames to write into the video file.
         - `video_path (str)` : path to the video file that you want to extract frames from.
@@ -106,10 +110,9 @@ def create_video_clip(frames: list[np.ndarray], fps=60) -> ImageSequenceClip:
 def save_keyframe(
     frame: np.ndarray, frame_duration: float, filename: str, output_folder: str
 ) -> None:
-    """
-    Save a keyframe to the specified output folder with a name that includes its duration in seconds.
+    """Save a keyframe to the specified output folder with a name that includes its duration in seconds.
 
-    Parameters:
+    Parameters
     ----------
         - `frame (np.ndarray)` : The frame to be saved.
         - `frame_duration (float)` : Duration of the frame in seconds.
@@ -129,15 +132,15 @@ def save_keyframe(
 def create_frame_index(
     vid_path: str, output_path: str, buffer: FrameBuffer, keywords: list[str]
 ) -> list[str]:
-    """Create a new video with frames that contain <keywords>.
+    """Return a list of frames indices that contain <keywords>.
 
-    Parameters:
+    Parameters
     -----------
         - `interval` (int): How often to check for <keywords> in the video (in frames)
         - `buffer` (int): An instance of a FrameBuffer to cache a limited number of frames
         - `keywords` (list): A list of keywords to to look for in the killfeed.
 
-    Returns:
+    Returns
     --------
     - `log` (list): A Debug log
     """
@@ -204,32 +207,34 @@ def create_frame_index(
     return frame_index
 
 
-def video_to_ndarray(video_path: str, keywords: list[str], buffer: FrameBuffer) -> list[ndarray]:
+def video_to_ndarray(video_path: str, saving_fps: int = 1) -> list[ndarray]:
+    count: cython.int
+    event_gap: cython.double
+    video_fps: cython.int
+    num_frames: cython.int
+    frames: cython.list[ndarray]
+
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         return []
 
     # Extract vars from video(\w+)\s=\sR
-    count = 0
     cap = cv2.VideoCapture(video_path)
+    video_fps = round(cap.get(cv2.CAP_PROP_FPS))
     num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    written_frames_index = []
     frames = []
+
+    event_gap = video_fps / saving_fps
+    count = 0
+    print(event_gap)
+    print(video_fps)
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
-        print(f"Reading frame {count}/{num_frames}", end="\r")
-        buffer.add_frame((frame, count))
-        # Check for killfeed every <CONSTS["INTERVAL"]> frames instead of each frame to save time/resources
-        if count % INTERVAL == 0:
-            kill_detected, name = name_in_killfeed(frame, keywords)
-            if kill_detected is True:
-                cprint(f"{f'Kill detected @ frame {count}", fg.green':>100}", end="\r")
-                # Write the past <CONSTS["INTERVAL"]> frames to the output video
-                for buffered_frame, index in buffer.get_frames():
-                    # Check to ensure that we don't write duplicate frames
-                    if index not in written_frames_index:
-                        frames.append(buffered_frame)
+        print(f"Processing frame {count}/{num_frames}", end="\r")
+        # Check for killfeed every <event_gap> frames instead of each frame to save time/resources
+        if count % event_gap == 0:
+            frames.append(frame)
         count += 1
     return frames

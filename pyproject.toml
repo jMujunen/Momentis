@@ -18,6 +18,7 @@ exclude = ["build", "dist"]
 typeCheckingMode = "on"
 reportUnboundVariableNames = true
 reportAttributeAccessIssue = false
+reportArgumentType = false
 
 [build-system]
 requires = ["poetry-core"]

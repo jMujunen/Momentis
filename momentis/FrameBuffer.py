@@ -1,14 +1,14 @@
 from collections import deque
 
 from numpy import ndarray
+from size import Size
 
 
 class FrameBuffer:
     def __init__(self, max_size: int) -> None:
-        """
-        Initialize the frame buffer.
+        """Initialize the frame buffer.
 
-        ### Paramters:
+        ### Paramters
         -----------------
             - `max_size (int)`: Maximum number of frames to store.
         """
@@ -17,10 +17,9 @@ class FrameBuffer:
         self.index = deque(maxlen=max_size)
 
     def add_frame(self, frame: tuple[ndarray, int]) -> None:
-        """
-        Add a new frame to the buffer.
+        """Add a new frame to the buffer.
 
-        ### Parameters:
+        ### Parameters
         ---------------
             - `frame (ndarray)`: The frame to add.
         """
@@ -34,7 +33,7 @@ class FrameBuffer:
     def get_frames(self) -> list[ndarray]:
         """Get all frames currently in the buffer.
 
-        ### Returns:
+        ### Returns
         ------------
         - `list[ndarray]`: The current frames in the buffer as a list.
         """
@@ -43,19 +42,18 @@ class FrameBuffer:
     def get_recent_frames(self, num_frames: int) -> list[ndarray]:
         """Get a specified number of recent frames from the buffer.
 
-        ### Parameters:
-        -----------------
+        ### Parameters
+        --------------
             - `num_frames (int)`: The number of recent frames to return.
         """
         num_frames = min(num_frames, len(self.buffer))
         return list(self.buffer)[num_frames:]
 
     def get_future_frames(self, num_frames: int) -> list[ndarray]:
-        """
-        Get a specified number of older frames from the buffer.
+        """Get a specified number of older frames from the buffer.
 
-        ### Parameters:
-        -----------------
+        ### Parameters
+        ---------------
             - `num_frames (int)`: The number of older frames to return.
         """
         num_frames = min(num_frames, len(self.buffer))
@@ -65,3 +63,10 @@ class FrameBuffer:
         """Release the buffer by emptying it."""
         self.buffer = deque(maxlen=0)
         del self.buffer
+
+    def __repr__(self) -> str:
+        self.size = Size(sum([f[0].size for i, f in enumerate(self.get_frames())]))
+        return f"FrameBuffer(num_frames={len(self.buffer)}, total_size={self.size:s)}, avg_frame_size={Size(int(self.size)/len(self))})"
+
+    def __len__(self) -> int:
+        return len(self.buffer)

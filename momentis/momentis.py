@@ -3,12 +3,10 @@
 
 import argparse
 import os
+from pathlib import Path
 
 import cv2
 from Color import cprint, fg, style
-from fsutils import Dir
-from ProgressBar import ProgressBar
-
 from config import (
     BUFFER,
     FPS as WRITER_FPS,
@@ -17,7 +15,10 @@ from config import (
     ROI,
 )
 from FrameBuffer import FrameBuffer
-from utils import name_in_killfeed
+from fsutils import Dir
+from ThreadPoolHelper import Pool
+
+from .utils import name_in_killfeed
 
 ROI_W, ROI_H = ROI
 
@@ -27,13 +28,13 @@ def detect_frames(
 ) -> list[str]:
     """Create a new video with frames that contain <keywords>.
 
-    Parameters:
+    Parameters
     -----------
         - `interval` (int): How often to check for <keywords> in the video (in frames)
         - `buffer` (int): An instance of a FrameBuffer to cache a limited number of frames
         - `keywords` (list): A list of keywords to to look for in the killfeed.
 
-    Returns:
+    Returns
     --------
         - `log (list)` : A Debug log
     """
@@ -53,9 +54,9 @@ def detect_frames(
     fps = cap.get(cv2.CAP_PROP_FPS)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    x, y = width - ROI_H, height - ROI_H
-    roi = x, y, ROI_W, ROI_H
+    roi = (width - ROI_W, 0, ROI_W, ROI_H)
     # Define output video writer object
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
@@ -73,7 +74,7 @@ def detect_frames(
         buffer.add_frame((frame, count))
         # Check for killfeed every <INTERVAL> frames instead of each frame, to save time/resources
         if count % INTERVAL == 0:
-            kill_detected, name = name_in_killfeed(frame, keywords, ())
+            kill_detected, name = name_in_killfeed(frame, keywords, roi)
             if kill_detected is True:
                 msg = log_template.format("DETECT", "Kill found @", count)  # DEBUG
                 print(f"{msg:>100}", end="\r")  # DEBUG
@@ -85,7 +86,7 @@ def detect_frames(
                         msg = log_template.format(
                             f"{fg.green}WRITE{style.reset}", "Wrote frame", index
                         )  # DEBUG
-                        cprint(f"{msg:>100}", fg.green, end="\r")  # DEBUG
+                        cprint(f"{msg:40}", fg.green, end="\r")  # DEBUG
                         log.append(msg)  # DEBUG
                         out.write(buffered_frame)
                         written_frames.append(index)
@@ -103,7 +104,7 @@ def detect_frames(
                 print(f"{msg:>100}", end="\r")  # DEBUG
         # Debug logging
         else:
-            msg = log_template.format("INFO", "Current", count)  # DEBUG
+            msg = log_template.format("INFO", "Current", f"{count}/{total_frames}")  # DEBUG
             log.append(msg)  # DEBUG
             print(f"{msg:<40}", end="\r")  # DEBUG
 
@@ -118,7 +119,7 @@ def detect_frames(
         #     2,
         # )
         # cv2.imshow("FRAME", frame)
-
+        # cv2.waitKey(10)
         count += 1
     # Flag for garbage collection
     cap.release()
@@ -129,7 +130,7 @@ def detect_frames(
 def main(input_path: str, keywords: list[str], debug: bool) -> None:
     """Process all videos in `input_paht`.
 
-    Parameters:
+    Parameters
     ------------
         - `input_path (str)` : path to input videos folder
         - `keywords (list[str])` : list of keywords to search for in killfeed messages
@@ -140,23 +141,26 @@ def main(input_path: str, keywords: list[str], debug: bool) -> None:
     # Error handling
     if not videos:
         raise Exception("Error: No videos found in the provided directory.")
-    output_folder = os.path.join(input_path, "opencv-output")
-    log_folder = os.path.join(output_folder, "logs")
+    output_folder = Path(input_path, "opencv-output")
+    log_folder = Path(output_folder, "logs")
     # Error handling
-    os.makedirs(output_folder, exist_ok=True)
-    os.makedirs(log_folder, exist_ok=True)
+    output_folder.mkdir(parents=True, exist_ok=True)
+    log_folder.mkdir(parents=True, exist_ok=True)
+
     # Create a buffer of size BUFFER to store frames temporarily
     # <BUFFER> determines the how the number of frames to write prior to killfeed being detected
     buffer = FrameBuffer(BUFFER)
     # pb = ProgressBar(len(videos))
+    buffer = FrameBuffer(BUFFER)
+    # pb = ProgressBar(len(videos))
     for vid in videos:
         # File path definitions
-        output_video = os.path.join(output_folder, f"cv2_{vid.basename}")
+        output_video = Path(output_folder, f"cv2_{vid.name}")
         log = detect_frames(vid.path, output_video, buffer, keywords)
         # Write debug information to file
         if debug:
-            with open(os.path.join(log_folder, f"cv2_{vid.filename}.log"), "w") as logfile:
-                logfile.write("\n".join(log))
+            logfile = Path(log_folder, f"cv2_{vid.name}.log")
+            logfile.write_text("\n".join(log))
 
 
 def parse_args() -> argparse.Namespace:
