@@ -3,6 +3,7 @@
 
 import argparse
 import os
+import sys
 from pathlib import Path
 
 import cv2
@@ -18,7 +19,7 @@ from FrameBuffer import FrameBuffer
 from fsutils import Dir
 from ThreadPoolHelper import Pool
 
-from .utils import name_in_killfeed
+from momentis.utils import name_in_killfeed
 
 ROI_W, ROI_H = ROI
 

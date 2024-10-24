@@ -1,25 +1,13 @@
-[tool.poetry]
+[project]
 name = "momentis"
 version = "0.1.0"
-description = ""
-authors = ["jMujunen <jMujunen@github.com>"]
+author = ["jMujunen <jMujunen@github/com>"]
 readme = "README.md"
-
-[tool.poetry.dependencies]
-python = "^3.12"
-opencv-contrib-python = {path = "/home/joona/opencv-cuda/opencv_contrib_python-4.10.0.84-cp37-abi3-linux_x86_64.whl"}
-PyQt6 = "^6.7.1"
-librosa = "^0.10.2.post1"
-imutils = "^0.5.4"
-pyqt5 = "^5.15.11"
-
-[tool.pyright]
-exclude = ["build", "dist"]
-typeCheckingMode = "on"
-reportUnboundVariableNames = true
-reportAttributeAccessIssue = false
-reportArgumentType = false
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+description = "Trim video game clips into a short video containing only the relevant frames"
+requires-python = ">=3.12"
+dependencies = [
+    "moviepy>=1.0.3",
+    "numpy>=2.1.2",
+    "opencv-python>=4.10.0.84",
+    "pytesseract>=0.3.13",
+]
