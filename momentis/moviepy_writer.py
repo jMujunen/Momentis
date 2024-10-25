@@ -115,8 +115,6 @@ def relevant_frames(video_path: str, buffer: FrameBuffer, keywords: list) -> tup
 
 
 def main(input_path: str, keywords: list[str]) -> None:
-    input_dir = Path(input_path).resolve()
-
     videos = Dir(input_path).videos
     # Error handling
     if not videos:
