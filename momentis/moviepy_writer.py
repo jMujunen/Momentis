@@ -6,9 +6,9 @@ from pathlib import Path
 import cv2
 import moviepy.editor as mp
 import pytesseract
-from fsutils import Dir
 from numpy import ndarray
-from utils import FrameBuffer, find_continuous_segments
+
+from .qqutils import FrameBuffer, find_continuous_segments
 
 # Constants
 INTERVAL = 30
@@ -50,7 +50,7 @@ def name_in_killfeed(img: ndarray, keywords: list[str], *args: tuple[int, ...]) 
     return False, text.lower()
 
 
-def relevant_frames(video_path: str, buffer: FrameBuffer, keywords: list) -> tuple[list[int], int]:
+def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tuple[list[int], int]:
     """Process a video and extracts frames that contain kill-related information.
 
     Parameters
@@ -62,7 +62,7 @@ def relevant_frames(video_path: str, buffer: FrameBuffer, keywords: list) -> tup
         A tuple containing a list of frame indices that contain kill-related information and the original FPS of the video.
 
     """
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         print(f"Error loading {video_path}")
         cap.release()
@@ -115,7 +115,14 @@ def relevant_frames(video_path: str, buffer: FrameBuffer, keywords: list) -> tup
 
 
 def main(input_path: str, keywords: list[str]) -> None:
-    videos = Dir(input_path).videos
+    exts = [".mp4", ".avi", ".MOV", ".mkv"]
+    input_dir = Path(input_path)
+    videos = [
+        Path(root, file)
+        for root, _, files in input_dir.walk()
+        for file in files
+        if file[-4:].lower() in exts
+    ]
     # Error handling
     if not videos:
         raise Exception("Error: No videos found in the provided directory.")
@@ -132,7 +139,7 @@ def main(input_path: str, keywords: list[str]) -> None:
             # File path definitions
             output_video = Path(output_folder, f"cv2_{vid.name}")
             try:
-                continuous_frames, fps = relevant_frames(vid.path, buffer, keywords)
+                continuous_frames, fps = relevant_frames(vid, buffer, keywords)
                 if len(continuous_frames) == 0:
                     continue
             except FileNotFoundError:
@@ -145,7 +152,7 @@ def main(input_path: str, keywords: list[str]) -> None:
             # Write sequence to file for debugging
             log_file = Path(output_folder, f"{vid.name}-frames.log")
             log_file.write_text(json.dumps(segments))
-            clip = mp.VideoFileClip(vid.path)
+            clip = mp.VideoFileClip(str(vid))
             # Get the audio from the original video
             audio = clip.audio
 
