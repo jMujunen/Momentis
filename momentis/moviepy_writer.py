@@ -7,8 +7,7 @@ import cv2
 import moviepy.editor as mp
 import pytesseract
 from numpy import ndarray
-
-from .qqutils import FrameBuffer, find_continuous_segments
+from utils import FrameBuffer, find_continuous_segments
 
 # Constants
 INTERVAL = 30
