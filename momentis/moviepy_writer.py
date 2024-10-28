@@ -16,7 +16,6 @@ WRITER_FPS = 60
 BUFFER = 240
 ROI_W, ROI_H = (800, 200)
 ALT_W, ALT_H = (800, 200)
-# List of keywords related to kill feeds
 
 
 def name_in_killfeed(img: ndarray, keywords: list[str], *args: tuple[int, ...]) -> tuple[bool, str]:
