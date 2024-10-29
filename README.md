@@ -3,19 +3,19 @@
 ## Overview
 
 Momentis is a Python-based project that aims to analyze first-person shooter video game
-clips for specific keywords (names in kill-feed) and patterns (audio ques) using OpenCV and other libraries.
+clips for specific keywords (names in kill-feed) and patterns (audio ques: TODO) using OpenCV and other libraries.
 The main goal of this project is to take several hours of footage from individual clips
 and trim them down leaving only the relevant parts.
 
 To determine the efficacy of this project, the following show simple metrics comparing
 the total duration and size of the original footage with the trimmed versions.
 
-| Game  | Original Duration | Original Size | Result Duration     | Result Size | Diff               |
-| ----- | ----------------- | ------------- | ------------------- | ----------- | ------------------ |
-| CS:GO | 8 hours           | 26GB          | **2 hours 45 mins** | **8GB**     | **~ 3x Reduction** |
-| CS2   | TODO              | TODO          | TODO                | TODO        | TODO               |
-| PUBG  | TODO              | TODO          | TODO                | TODO        | TODO               |
-| Apex  | TODO              | TODO          | TODO                | TODO        | TODO               |
+| Game  | Original Duration | Original Size | Result Duration     | Result Size | Diff                |
+| ----- | ----------------- | ------------- | ------------------- | ----------- | ------------------  |
+| CS:GO | 8 hours           | 26GB          | **2 hours 45 mins** | **8GB**     | ** ~ 3x Reduction** |
+| CS2   | TODO              | TODO          | TODO                | TODO        | TODO                |
+| PUBG  | TODO              | TODO          | TODO                | TODO        | TODO                |
+| Apex  | TODO              | TODO          | TODO                | TODO        | TODO                |
 
 > Note: This will re-encoding each video and due to limitations in `moviepy` api, gpu transcoding is not supported.
 > This results in a long processing time for large video sets.
