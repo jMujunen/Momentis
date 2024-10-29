@@ -121,13 +121,13 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
     return written_frames, fps
 
 
-def main(input_path: str, keywords: list[str]) -> None:
+def main(input_path: str, keywords: list[str], debug=False) -> None:
     """Process videos and extract frames containing kill-related information.
 
     Parameters
         - input_path (str): Path to the directory containing video files.
         - keywords (list): List of keywords related to kill feeds.
-
+        - debug (bool): If True, output a json file containing the frames written and their indices.
     """
     exts = [".mp4", ".avi", ".MOV", ".mkv"]
     input_dir = Path(input_path)
@@ -163,9 +163,6 @@ def main(input_path: str, keywords: list[str]) -> None:
                 continue
             # Extract continuous frame sequences from set of frames
             segments = sorted(find_continuous_segments(continuous_frames))
-            # Write sequence to file for debugging
-            log_file = Path(output_folder, f"{vid.name}-frames.log")
-            log_file.write_text(json.dumps(segments))
             clip = mp.VideoFileClip(str(vid))
             # Get the audio from the original video
             audio = clip.audio
@@ -182,6 +179,10 @@ def main(input_path: str, keywords: list[str]) -> None:
                 except Exception as e:
                     print(f"Error writing subclips {vid.name}: {e}")
             clip.close()
+            if debug:
+                # Write sequence to file for debugging
+                log_file = Path(output_folder, f"{vid.name}-frames.log")
+                log_file.write_text(json.dumps(segments))
         except Exception as e:
             print(f"Error processing video {vid.name}: {e}")
         print()
@@ -190,6 +191,7 @@ def main(input_path: str, keywords: list[str]) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("PATH", help="Path to videos", type=str)
+    parser.add_argument("--debug", help="Enable debug mode", action="store_true")
     return parser.parse_args()
 
 
@@ -198,4 +200,4 @@ if __name__ == "__main__":
     args = parse_args()
     keywords_file = Path(module_path.parent, "keywords.txt")
     keywords = keywords_file.read_text().splitlines()
-    main(args.PATH, keywords)
+    main(args.PATH, keywords, args.debug)
