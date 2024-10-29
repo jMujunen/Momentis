@@ -25,10 +25,9 @@ def name_in_killfeed(img: ndarray, keywords: list[str], *args: tuple[int, ...]) 
     Parameters
     -----------
         - `img (ndarray)` : The image to extract text from
-        - `rio (tuple)` : The region of interest to extract text from
-
+        - `keywords (list[str])` : The keywords to search for in the text
+        - `*args (tuple[int])` : The region of interest(s) to extract text from in the format: x, y, w, h
     """
-
     preprocessed_frames = []
     if args is not None:
         for arg in args:
@@ -42,18 +41,16 @@ def name_in_killfeed(img: ndarray, keywords: list[str], *args: tuple[int, ...]) 
             )
 
     concatted_img = cv2.hconcat(preprocessed_frames)
-    overlay_img = preprocessed_frames[0]
     text = pytesseract.image_to_string(concatted_img, lang="eng")
 
-    # Overlay ROIs on the original frame
-    for arg in args:
-        x, y, w, h = arg  # type: ignore
-        cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    # Overlay ROIs on the original frame for debugging
+    # for arg in args:
+    # x, y, w, h = arg  # type: ignore
+    # cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    # if img.shape[:2] > MONITOR_DIMS:
+    # img = cv2.resize(img, MONITOR_DIMS)
+    # cv2.imshow("Frame", img)
 
-    if img.shape[:2] > MONITOR_DIMS:
-        img = cv2.resize(img, MONITOR_DIMS)
-
-    cv2.imshow("Frame", img)
     # Check if any kill-related keyword is present in the extracted text
     if any(keyword.lower() in text.lower() for keyword in keywords):
         return True, text.lower()
@@ -106,7 +103,6 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
             if kill_detected is True:
                 msg = log_template.format("DETECT", "Kill found @", count)
                 print(f"{msg:>100}", end="\r")
-                print(name)
                 # Write the past INTERVAL frames to the output video
                 for _buffered_frame, index in buffer.get_frames():
                     if index not in written_frames:
@@ -126,6 +122,13 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
 
 
 def main(input_path: str, keywords: list[str]) -> None:
+    """Process videos and extract frames containing kill-related information.
+
+    Parameters
+        - input_path (str): Path to the directory containing video files.
+        - keywords (list): List of keywords related to kill feeds.
+
+    """
     exts = [".mp4", ".avi", ".MOV", ".mkv"]
     input_dir = Path(input_path)
     videos = [
@@ -167,6 +170,7 @@ def main(input_path: str, keywords: list[str]) -> None:
             # Get the audio from the original video
             audio = clip.audio
 
+            # Create a single video clip for each segment of continuous frames
             subclips = [clip.subclip(segment[0] / fps, segment[-1] / fps) for segment in segments]
             if len(subclips) > 0:
                 try:
