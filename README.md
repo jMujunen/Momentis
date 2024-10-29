@@ -2,7 +2,24 @@
 
 ## Overview
 
-Momentis is a Python-based project that aims to analyze first-person shooter video game clips for specific keywords (names in kill-feed) and patterns (audio ques) using OpenCV and other libraries. The main goal of this project is to take several hours of footage from individual clips and trim them down leaving only the relevant parts.
+Momentis is a Python-based project that aims to analyze first-person shooter video game
+clips for specific keywords (names in kill-feed) and patterns (audio ques) using OpenCV and other libraries.
+The main goal of this project is to take several hours of footage from individual clips
+and trim them down leaving only the relevant parts.
+
+To determine the efficacy of this project, the following show simple metrics comparing
+the total duration and size of the original footage with the trimmed versions.
+
+| Game  | Original Duration | Original Size | Result Duration     | Result Size | Diff               |
+| ----- | ----------------- | ------------- | ------------------- | ----------- | ------------------ |
+| CS:GO | 8 hours           | 26GB          | **2 hours 45 mins** | **8GB**     | **~ 3x Reduction** |
+| CS2   | TODO              | TODO          | TODO                | TODO        | TODO               |
+| PUBG  | TODO              | TODO          | TODO                | TODO        | TODO               |
+| Apex  | TODO              | TODO          | TODO                | TODO        | TODO               |
+
+> Note: This will re-encoding each video and due to limitations in `moviepy` api, gpu transcoding is not supported.
+> This results in a long processing time for large video sets.
+> For reference, 8 hours of CS:GO footage took my i7-12700k roughly 4 hours. I suggest running it overnight
 
 ## Usage
 
@@ -39,4 +56,13 @@ Generally, the _OCR_ (Optical character recognition) has a hard time finding an 
 
 ## Showcase
 
-![](./assets/20241028_175350.webm)
+The following shows a glimpse of how it works
+
+Original Duration: **90s**
+Trimmed Duration: **41s**
+
+![](./assets/example_intput.gif)
+
+Below is the resulting video
+
+![](./assets/_example.gif)
