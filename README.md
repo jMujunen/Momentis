@@ -75,7 +75,7 @@ pip install -r requirements.txt
 2. Extract the zip file into any location on your computer
 3. Open a shell eg. command prompt, terminal, bash etc.
 
-- Navigate to where you extracted the files using `cd /path/to/momentis-master
+- Navigate to where you extracted the files using `cd /path/to/momentis-master`
 - Othewise, open a shell in your file explorer by right clicking the Momentis-master
   and choosing "Open in terminal" or "Open PowerShell window here"
 
