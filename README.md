@@ -8,20 +8,22 @@ and trim them down leaving only the relevant parts.
 To determine the efficacy of this project, the following show simple metrics comparing
 the total duration and size of the original footage with the trimmed versions.
 
-| Game  | Original Duration | Original Size | Result Duration     | Result Size | Diff                |
-| ----- | ----------------- | ------------- | ------------------- | ----------- | ------------------- |
-| CS:GO | 8 hours           | 26GB          | **2 hours 45 mins** | **8GB**     | ** ~ 3x Reduction** |
-| CS2   | TODO              | TODO          | TODO                | TODO        | TODO                |
-| PUBG  | TODO              | TODO          | TODO                | TODO        | TODO                |
-| Apex  | TODO              | TODO          | TODO                | TODO        | TODO                |
+| Game  | Original Duration | Original Size | Result Duration     | Result Size | Diff           |
+| ----- | ----------------- | ------------- | ------------------- | ----------- | -------------- |
+| CS:GO | 8 hours           | 26GB          | **2 hours 45 mins** | **8GB**     | ~ 3x Reduction |
+| CS2   | TODO              | TODO          | TODO                | TODO        | TODO           |
+| PUBG  | TODO              | TODO          | TODO                | TODO        | TODO           |
+| Apex  | TODO              | TODO          | TODO                | TODO        | TODO           |
 
 > Note: This will re-encoding each video and due to limitations in `moviepy` api, gpu transcoding is not supported.
 > This results in a long processing time for large video sets.
 > For reference, 8 hours of CS:GO footage took my i7-12700k roughly 4 hours. I suggest running it overnight
 
-## Usage
+### Getting Started
 
-As always, using a virtual environment is recommended:
+These instructions will get you up and running on your local machine.
+
+Steps:
 
 1. Clone this repository
 2. Create a virtual environment
@@ -30,27 +32,64 @@ As always, using a virtual environment is recommended:
 5. Populate keywords.txt with desired words to initialize a subclip (one per line)
 6. Run Momentis
 
+#### Prerequisites
+
+- Python >= 3.12
+- python (executable in your PATH)
+- git (executable in your PATH)
+
+To ensure python has been installed correctly run the following command:
+
+```python
+$ python --version
+Python 3.12.6
+```
+
+#### Setup
+
+As always, using a virtual environment is recommended:
+
 ```bash
-# Clone this repository
+# Step 1: Clone this repository
 git clone https://github.com/jMujunen/momentis.git
 cd momentis
+# Step 2: Create a virtual environment (optional but recommended)
 python -m venv venv
 
+# Step 3: Activate your virtual environment
 # Linux
 source venv/bin/activate
 # Windows
-.\venv\Scripts\activate
+\venv\Scripts\activate
 
+# Step 4: Install dependencies
 pip install -r requirements.txt
-python momentis.py /path/to/your/videos
 ```
 
-This will process the videos in the specified directory and generate output in a subdirectory named "opencv-output". The output includes the resulting trimmed videos along with .json debugging files for each processed video.
-
-### Populating keywords.txt
+#### Populating keywords.txt
 
 Keywords are used to identify when to start and stop recording a subclip. Several subclips create a single video. You should populate keywords.txt with words that you expect to see in the kill-feed of your game, such as your username.
 Generally, the _OCR_ (Optical character recognition) has a hard time finding an exact match in certain scenes so its recommended use small 'chunks' instead a of a whole word.
+
+For the clip shown at the bottom, my username is 'MrHoffman'. The following shows how my username gets interpreted by the OCR:
+
+```text
+mrhoffman_
+mrhoffman_
+you finally killed
+you knocked out
+hrhoffman.
+mihoffman_
+mrhafiman
+```
+
+#### Running Momentis
+
+```bash
+python momentis/momentis.py /path/to/your/videos
+```
+
+This will process the videos in the specified directory and generate output in a subdirectory named "opencv-output"
 
 ## Showcase
 
