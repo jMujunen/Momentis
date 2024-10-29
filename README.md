@@ -17,7 +17,7 @@ the total duration and size of the original footage with the trimmed versions.
 
 > Note: This will re-encoding each video and due to limitations in `moviepy` api, gpu transcoding is not supported.
 > This results in a long processing time for large video sets.
-> For reference, 8 hours of CS:GO footage took my i7-12700k roughly 4 hours. I suggest running it overnight
+> For reference, 8 hours of CS:GO footage took my i7-12700k roughly 4 hours. I suggest running it overnight. Expect high cpu usage.
 
 ### Getting Started
 
