@@ -79,9 +79,10 @@ pip install -r requirements.txt
 - Othewise, open a shell in your file explorer by right clicking the Momentis-master
   and choosing "Open in terminal" or "Open PowerShell window here"
 
-4. Activate the virtual environment (optional but recommended)
+4. Create and activate the virtual environment (optional but recommended)
 
 ```bash
+python -m venv venv
 # Linux
 source venv/bin/activate
 # Windows
