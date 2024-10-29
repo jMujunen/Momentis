@@ -49,6 +49,8 @@ Python 3.12.6
 
 As always, using a virtual environment is recommended:
 
+##### Recommended Steps
+
 ```bash
 # Step 1: Clone this repository
 git clone https://github.com/jMujunen/momentis.git
@@ -57,12 +59,38 @@ cd momentis
 python -m venv venv
 
 # Step 3: Activate your virtual environment
+
 # Linux
 source venv/bin/activate
 # Windows
 \venv\Scripts\activate
 
 # Step 4: Install dependencies
+pip install -r requirements.txt
+```
+
+##### Alternative Steps
+
+1. Download the zip file by clicking on "Code" -> "Download ZIP"
+2. Extract the zip file into any location on your computer
+3. Open a shell eg. command prompt, terminal, bash etc.
+
+- Navigate to where you extracted the files using `cd /path/to/momentis-master
+- Othewise, open a shell in your file explorer by right clicking the Momentis-master
+  and choosing "Open in terminal" or "Open PowerShell window here"
+
+4. Activate the virtual environment (optional but recommended)
+
+```bash
+# Linux
+source venv/bin/activate
+# Windows
+\venv\Scripts\activate
+```
+
+5. Install dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
