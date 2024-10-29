@@ -16,6 +16,8 @@ BUFFER = 240
 ROI_W, ROI_H = (800, 200)
 ALT_W, ALT_H = (800, 200)
 
+MONITOR_DIMS = (1920, 1080)
+
 
 def name_in_killfeed(img: ndarray, keywords: list[str], *args: tuple[int, ...]) -> tuple[bool, str]:
     """Check if a kill-related keyword is present in the text extracted from the ndarray.
@@ -40,8 +42,18 @@ def name_in_killfeed(img: ndarray, keywords: list[str], *args: tuple[int, ...]) 
             )
 
     concatted_img = cv2.hconcat(preprocessed_frames)
+    overlay_img = preprocessed_frames[0]
     text = pytesseract.image_to_string(concatted_img, lang="eng")
-    cv2.imshow("concatted", concatted_img)
+
+    # Overlay ROIs on the original frame
+    for arg in args:
+        x, y, w, h = arg  # type: ignore
+        cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+    if img.shape[:2] > MONITOR_DIMS:
+        img = cv2.resize(img, MONITOR_DIMS)
+
+    cv2.imshow("Frame", img)
     # Check if any kill-related keyword is present in the extracted text
     if any(keyword.lower() in text.lower() for keyword in keywords):
         return True, text.lower()
@@ -74,7 +86,7 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
 
     # Define region of interest
     killfeed_roi = (width - ROI_W, 75, ROI_W, ROI_H)
-    alt_x, alt_y = (round(width * 0.39), round(height * 0.65))
+    alt_x, alt_y = (round(width * 0.35), round(height * 0.6))
     alternative_roi = (alt_x, alt_y, ALT_W, ALT_H)
 
     # Extract vars from video
@@ -109,6 +121,7 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
             print(f"{msg:<40}", end="\r")
 
         count += 1
+    cv2.destroyAllWindows()
     return written_frames, fps
 
 
