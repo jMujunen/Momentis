@@ -1,5 +1,3 @@
-# Momentis
-
 ## Overview
 
 Momentis is a Python-based project that aims to analyze first-person shooter video game
@@ -11,7 +9,7 @@ To determine the efficacy of this project, the following show simple metrics com
 the total duration and size of the original footage with the trimmed versions.
 
 | Game  | Original Duration | Original Size | Result Duration     | Result Size | Diff                |
-| ----- | ----------------- | ------------- | ------------------- | ----------- | ------------------  |
+| ----- | ----------------- | ------------- | ------------------- | ----------- | ------------------- |
 | CS:GO | 8 hours           | 26GB          | **2 hours 45 mins** | **8GB**     | ** ~ 3x Reduction** |
 | CS2   | TODO              | TODO          | TODO                | TODO        | TODO                |
 | PUBG  | TODO              | TODO          | TODO                | TODO        | TODO                |
