@@ -11,8 +11,8 @@ the total duration and size of the original footage with the trimmed versions.
 | Game  | Original Duration | Original Size | Result Duration     | Result Size | Diff           |
 | ----- | ----------------- | ------------- | ------------------- | ----------- | -------------- |
 | CS:GO | 8 hours           | 26GB          | **2 hours 45 mins** | **8GB**     | ~ 3x Reduction |
+| PUBG  | 3 hours 45 mis    | 46GB          | 30 minutes          | **7GB**     | ~ 7x Reduction |
 | CS2   | TODO              | TODO          | TODO                | TODO        | TODO           |
-| PUBG  | TODO              | TODO          | TODO                | TODO        | TODO           |
 | Apex  | TODO              | TODO          | TODO                | TODO        | TODO           |
 
 > Note: This will re-encoding each video and due to limitations in `moviepy` api, gpu transcoding is not supported.
