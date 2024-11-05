@@ -7,10 +7,11 @@ import cv2
 import moviepy.editor as mp
 import pytesseract
 from numpy import ndarray
-from utils import FrameBuffer, find_continuous_segments
+
+from .utils import FrameBuffer, find_continuous_segments  # type: ignore
 
 # Constants
-INTERVAL = 30
+INTERVAL = 60
 WRITER_FPS = 60
 BUFFER = 240
 ROI_W, ROI_H = (800, 200)
@@ -43,13 +44,13 @@ def name_in_killfeed(img: ndarray, keywords: list[str], *args: tuple[int, ...]) 
     concatted_img = cv2.hconcat(preprocessed_frames)
     text = pytesseract.image_to_string(concatted_img, lang="eng")
 
-    # Overlay ROIs on the original frame for debugging
+    # # Overlay ROIs on the original frame for debugging
     # for arg in args:
-    # x, y, w, h = arg  # type: ignore
-    # cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-    # if img.shape[:2] > MONITOR_DIMS:
-    # img = cv2.resize(img, MONITOR_DIMS)
-    # cv2.imshow("Frame", img)
+    #     x, y, w, h = arg  # type: ignore
+    #     cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    #     if img.shape[-2::-1] > MONITOR_DIMS:
+    #         img = cv2.resize(img, MONITOR_DIMS)
+    #     cv2.imshow("Frame", img)
 
     # Check if any kill-related keyword is present in the extracted text
     if any(keyword.lower() in text.lower() for keyword in keywords):
@@ -88,7 +89,8 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
 
     # Extract vars from video
     count = 0
-    cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
+    # cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
+    cap = cv2.VideoCapture(video_path)
     written_frames = []
     while cap.isOpened():
         ret, frame = cap.read()
@@ -121,13 +123,16 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
     return written_frames, fps
 
 
-def main(input_path: str, keywords: list[str], debug=False) -> None:
+def main(
+    input_path: str, keywords: list[str], debug=False, output_path: str = "../opencv_output"
+) -> None:
     """Process videos and extract frames containing kill-related information.
 
     Parameters
         - input_path (str): Path to the directory containing video files.
         - keywords (list): List of keywords related to kill feeds.
         - debug (bool): If True, output a json file containing the frames written and their indices.
+        - output_path (str): Output directory path to write the processed video and frames.
     """
     exts = [".mp4", ".avi", ".MOV", ".mkv"]
     input_dir = Path(input_path)
@@ -142,7 +147,7 @@ def main(input_path: str, keywords: list[str], debug=False) -> None:
         raise Exception("Error: No videos found in the provided directory.")
 
     # Folder creation
-    output_folder = Path(input_path, "opencv-output")
+    output_folder = Path(output_path).resolve()
     output_folder.mkdir(parents=True, exist_ok=True)
 
     # Create a buffer of size BUFFER to store frames temporarily
@@ -188,9 +193,53 @@ def main(input_path: str, keywords: list[str], debug=False) -> None:
         print()
 
 
+def cleanup(
+    original_path: str | Path,
+    processed_path: str | Path,
+    archive_path: str | Path,
+    final_output_path: str | Path,
+) -> None:
+    """Housekeeping. Move the original and result videos to their respective folders.
+
+    Parameters
+        - original_path (str): Path to the directory containing the original videos.
+        - processed_path (str): Path to the directory containing successfully processed videos.
+        - archive_path (str): Path to the directory where original videos are moved after processing.
+        - final_output_path (str): Path to the directory where processed videos are moved for final output.
+
+    The function moves successfully processed videos from the processed path to the final output path,
+    and original videos from the original path to the archive path. It also handles errors if files do not exist.
+    """
+    valid_extentions = [".mp4", ".mov", ".mkv"]
+    # Define path objects
+    original_dir = Path(original_path)  # Original videos
+    processed_dir = Path(processed_path)  # Successfully processed videos get moved here
+    final_out_dir = Path(final_output_path)  # Final output. Processed videos end up here at the end
+    archive_path = Path(archive_path)  # Originals get placed here after processing is complete
+
+    for processed_video in processed_dir.rglob("*.*"):
+        if processed_video.suffix in valid_extentions and processed_video.stat().st_size > 300:
+            # Move the processed video to the final output directory (if frames were written)
+            # If frames were not written, size of the file is 257 bytes
+            processed_video.rename(final_out_dir / processed_video.name)
+            # Find the original
+            original_video = Path(original_dir, processed_video.name.removeprefix("cv2_"))
+            if original_video.exists():
+                # Move the original video to the archive directory
+                original_video.rename(archive_path / original_video.name)
+            else:
+                print(
+                    f"\x1b[31m>>> Error: {original_video.name} does not exsist!\x1b[0m\n  {processed_video!s} \n  {original_video!s}"
+                )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("PATH", help="Path to videos", type=str)
+    parser.add_argument("--output", help="Output folder")
+    parser.add_argument(
+        "--remove_originals", help="Remove original videos after processing", action="store_true"
+    )
     parser.add_argument("--debug", help="Enable debug mode", action="store_true")
     return parser.parse_args()
 
@@ -199,5 +248,22 @@ if __name__ == "__main__":
     module_path = Path(__file__)
     args = parse_args()
     keywords_file = Path(module_path.parent, "keywords.txt")
-    keywords = keywords_file.read_text().splitlines()
-    main(args.PATH, keywords, args.debug)
+    if any((not keywords_file.exists(), not keywords_file.read_text())):
+        print("Error: keywords file not found")
+        raise FileNotFoundError
+
+    keywords = [
+        word for word in keywords_file.read_text().splitlines() if word[0] not in ["#", ";", "/"]
+    ]
+
+    input_path = Path(args.PATH)
+
+    main(input_path=input_path, keywords=keywords, debug=args.debug)
+    if args.remove_originals:
+        archive_path = Path(str(input_path).replace("ssd", "hdd"))
+        cleanup(
+            original_path=args.PATH,
+            processed_path=args.output,
+            archive_path=archive_path,
+            final_output_path=args.output,
+        )
