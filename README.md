@@ -25,12 +25,13 @@ These instructions will get you up and running on your local machine.
 
 Steps:
 
-1. Clone this repository
-2. Create a virtual environment
-3. Activate your virtual environment
-4. Install dependencies
-5. Populate keywords.txt with desired words to initialize a subclip (one per line)
-6. Run Momentis
+1. Install [tesseract-ocr](https://github.com/tesseract-ocr/tesseract?tab=readme-ov-file#installing-tesseract) and trained data for your language
+2. Clone this repository
+3. Create a virtual environment
+4. Activate your virtual environment
+5. Install dependencies
+6. Populate keywords.txt with desired words to initialize a subclip (one per line)
+7. Run Momentis
 
 #### Prerequisites
 
@@ -71,15 +72,16 @@ pip install -r requirements.txt
 
 ##### Alternative Steps
 
-1. Download the zip file by clicking on "Code" -> "Download ZIP"
-2. Extract the zip file into any location on your computer
-3. Open a shell eg. command prompt, terminal, bash etc.
+1. Install [tesseract-ocr](https://github.com/tesseract-ocr/tesseract?tab=readme-ov-file#installing-tesseract) and trained data for your language
+2. Download the zip file by clicking on "Code" -> "Download ZIP"
+3. Extract the zip file into any location on your computer
+4. Open a shell eg. command prompt, terminal, bash etc.
 
 - Navigate to where you extracted the files using `cd /path/to/momentis-master`
 - Othewise, open a shell in your file explorer by right clicking the Momentis-master
   and choosing "Open in terminal" or "Open PowerShell window here"
 
-4. Create and activate the virtual environment (optional but recommended)
+5. Create and activate the virtual environment (optional but recommended)
 
 ```bash
 python -m venv venv
