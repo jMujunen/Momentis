@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import os
 from pathlib import Path
 
 import cv2
@@ -18,6 +19,7 @@ ROI_W, ROI_H = (800, 200)
 ALT_W, ALT_H = (800, 200)
 
 MONITOR_DIMS = (1920, 1080)
+VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv"}
 
 
 def name_in_killfeed(img: ndarray, keywords: list[str], *args: tuple[int, ...]) -> tuple[bool, str]:
@@ -43,7 +45,7 @@ def name_in_killfeed(img: ndarray, keywords: list[str], *args: tuple[int, ...]) 
 
     concatted_img = cv2.hconcat(preprocessed_frames)
     text = pytesseract.image_to_string(concatted_img, lang="eng")
-
+    # cv2.imshow("Frame", concatted_img)
     # # Overlay ROIs on the original frame for debugging
     # for arg in args:
     #     x, y, w, h = arg  # type: ignore
@@ -67,7 +69,7 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
         - keywords (list): List of keywords related to kill feeds.
 
     Returns
-        A tuple containing a list of frame indices that contain kill-related information and the original FPS of the video.
+        tuple: a list of continue frame sequences that contain the desired frames
 
     """
     cap = cv2.VideoCapture(str(video_path))
@@ -80,7 +82,7 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
+    fps = round(cap.get(cv2.CAP_PROP_FPS))
 
     # Define region of interest
     killfeed_roi = (width - ROI_W, 75, ROI_W, ROI_H)
@@ -90,7 +92,6 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
     # Extract vars from video
     count = 0
     # cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
-    cap = cv2.VideoCapture(video_path)
     written_frames = []
     while cap.isOpened():
         ret, frame = cap.read()
@@ -101,7 +102,7 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
         # Check for killfeed every INTERVAL frames instead of each frame to save time/resources
         if count % INTERVAL == 0:
             kill_detected, name = name_in_killfeed(frame, keywords, alternative_roi, killfeed_roi)
-            cv2.waitKey(1)
+            # cv2.waitKey(1)
             if kill_detected is True:
                 msg = log_template.format("DETECT", "Kill found @", count)
                 print(f"{msg:>100}", end="\r")
@@ -123,8 +124,21 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
     return written_frames, fps
 
 
+def is_video(filepath: str) -> bool:
+    """Check if the given file path points to a video file.
+
+    Parameters
+    ----------
+        filepath (str | Path): The file path to check.
+    """
+    return any(filepath.endswith(ext) for ext in VIDEO_EXTENSIONS)
+
+
 def main(
-    input_path: str, keywords: list[str], debug=False, output_path: str = "../opencv_output"
+    input_path: str,
+    keywords: list[str],
+    debug=False,
+    output_path: str | Path = "./opencv_output",
 ) -> None:
     """Process videos and extract frames containing kill-related information.
 
@@ -134,17 +148,14 @@ def main(
         - debug (bool): If True, output a json file containing the frames written and their indices.
         - output_path (str): Output directory path to write the processed video and frames.
     """
-    exts = [".mp4", ".avi", ".MOV", ".mkv"]
+
     input_dir = Path(input_path)
     videos = [
-        Path(root, file)
-        for root, _, files in input_dir.walk()
-        for file in files
-        if file[-4:].lower() in exts
+        Path(root, file) for root, _, files in input_dir.walk() for file in files if is_video(file)
     ]
-    # Error handling
     if not videos:
-        raise Exception("Error: No videos found in the provided directory.")
+        print("Error: No videos found in the provided directory.")
+        return
 
     # Folder creation
     output_folder = Path(output_path).resolve()
@@ -157,6 +168,12 @@ def main(
         try:
             # File path definitions
             output_video = Path(output_folder, f"cv2_{vid.name}")
+            # Check if video is already processed or corrupted
+            if output_video.exists() and output_video.stat().st_size > 300:
+                print("Skipping existing video...")
+                continue
+            if output_video.exists() and output_video.stat().st_size < 300:
+                output_video.unlink()
             try:
                 continuous_frames, fps = relevant_frames(vid, buffer, keywords)
                 if len(continuous_frames) == 0:
@@ -186,7 +203,7 @@ def main(
             clip.close()
             if debug:
                 # Write sequence to file for debugging
-                log_file = Path(output_folder, f"{vid.name}-frames.log")
+                log_file = Path(output_folder, f".{output_video.name}.log")
                 log_file.write_text(json.dumps(segments))
         except Exception as e:
             print(f"Error processing video {vid.name}: {e}")
@@ -210,12 +227,11 @@ def cleanup(
     The function moves successfully processed videos from the processed path to the final output path,
     and original videos from the original path to the archive path. It also handles errors if files do not exist.
     """
-    valid_extentions = [".mp4", ".mov", ".mkv"]
+    valid_extentions = {".mp4", ".mov", ".mkv"}
     # Define path objects
-    original_dir = Path(original_path)  # Original videos
-    processed_dir = Path(processed_path)  # Successfully processed videos get moved here
-    final_out_dir = Path(final_output_path)  # Final output. Processed videos end up here at the end
-    archive_path = Path(archive_path)  # Originals get placed here after processing is complete
+    original_dir = Path(original_path)
+    processed_dir = Path(processed_path)
+    final_out_dir = Path(final_output_path)
 
     for processed_video in processed_dir.rglob("*.*"):
         if processed_video.suffix in valid_extentions and processed_video.stat().st_size > 300:
@@ -226,11 +242,10 @@ def cleanup(
             original_video = Path(original_dir, processed_video.name.removeprefix("cv2_"))
             if original_video.exists():
                 # Move the original video to the archive directory
-                original_video.rename(archive_path / original_video.name)
+                original_video.rename(Path.joinpath(archive_path, original_video.name))
             else:
-                print(
-                    f"\x1b[31m>>> Error: {original_video.name} does not exsist!\x1b[0m\n  {processed_video!s} \n  {original_video!s}"
-                )
+                print(f"\x1b[31mError: {original_video.name} does not exsist!\x1b[0m")
+                print(f"Original: {original_video!s}\t\tProcessed: {processed_video!s}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -238,7 +253,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("PATH", help="Path to videos", type=str)
     parser.add_argument("--output", help="Output folder")
     parser.add_argument(
-        "--remove_originals", help="Remove original videos after processing", action="store_true"
+        "--archive",
+        help="Move original videos to this path after processing",
     )
     parser.add_argument("--debug", help="Enable debug mode", action="store_true")
     return parser.parse_args()
@@ -253,14 +269,14 @@ if __name__ == "__main__":
         raise FileNotFoundError
 
     keywords = [
-        word for word in keywords_file.read_text().splitlines() if word[0] not in ["#", ";", "/"]
+        word for word in keywords_file.read_text().splitlines() if word[0] not in {"#", ";", "/"}
     ]
 
     input_path = Path(args.PATH)
+    archive_path = Path(str(input_path).replace("ssd", "hdd"))
 
     main(input_path=input_path, keywords=keywords, debug=args.debug)
     if args.remove_originals:
-        archive_path = Path(str(input_path).replace("ssd", "hdd"))
         cleanup(
             original_path=args.PATH,
             processed_path=args.output,

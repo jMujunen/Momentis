@@ -1,13 +1,19 @@
 from collections import deque
-
-from moviepy.config import change_settings
 from numpy import ndarray
-
-# Change settings to use ffmpeg directly
-change_settings({"IMAGEMAGICK_BINARY": "ffmpeg"})
+from decorators import exectimer
 
 
+@exectimer
 def find_continuous_segments(frames: list[int]) -> list[list[int]]:
+    """Find continuous segments of frames.
+
+    Args:
+        frames (list[int]): A list of integers representing frames.
+
+    Returns:
+
+        list[list[int]]: A list of lists, where each sublist represents a continuous segment of frames.
+    """
     if not frames:
         return []
 
@@ -37,7 +43,7 @@ class FrameBuffer:
 
         ### Parameters
         ---------------
-            - `frame (ndarray)`: The frame to add.
+            - `frame tuple[ndarray, int]`: The (frame, index) to add.
         """
         if len(self.buffer) < self.max_size:
             self.buffer.append(frame)
