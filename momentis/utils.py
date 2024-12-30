@@ -1,9 +1,7 @@
 from collections import deque
 from numpy import ndarray
-from decorators import exectimer
 
 
-@exectimer
 def find_continuous_segments(frames: list[int]) -> list[list[int]]:
     """Find continuous segments of frames.
 
