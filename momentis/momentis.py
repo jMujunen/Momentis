@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 import cv2
-import moviepy.editor as mp
+import moviepy
 import pytesseract
 from numpy import ndarray
 
@@ -185,18 +185,23 @@ def main(
                 continue
             # Extract continuous frame sequences from set of frames
             segments = sorted(find_continuous_segments(continuous_frames))
-            clip = mp.VideoFileClip(str(vid))
+            clip = moviepy.VideoFileClip(str(vid))
             # Get the audio from the original video
             audio = clip.audio
-
             # Create a single video clip for each segment of continuous frames
-            subclips = [clip.subclip(segment[0] / fps, segment[-1] / fps) for segment in segments]
+            subclips = [
+                clip.subclipped(segment[0] / fps, segment[-1] / fps) for segment in segments
+            ]
             if len(subclips) > 0:
                 try:
                     # Write the video and audio to a new file
-                    final_clip = mp.concatenate_videoclips(subclips, method="compose")
+                    final_clip = moviepy.concatenate_videoclips(subclips, method="compose")
                     final_clip.write_videofile(
-                        str(output_video), codec="libx264", audio_codec="aac", remove_temp=True
+                        str(output_video),
+                        codec="libx264",
+                        audio_codec="aac",
+                        remove_temp=True,
+                        audio=True,
                     )
                 except Exception as e:
                     print(f"Error writing subclips {vid.name}: {e}")
