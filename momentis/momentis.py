@@ -45,14 +45,6 @@ def name_in_killfeed(img: ndarray, keywords: list[str], *args: tuple[int, ...]) 
 
     concatted_img = cv2.hconcat(preprocessed_frames)
     text = pytesseract.image_to_string(concatted_img, lang="eng")
-    # cv2.imshow("Frame", concatted_img)
-    # # Overlay ROIs on the original frame for debugging
-    # for arg in args:
-    #     x, y, w, h = arg  # type: ignore
-    #     cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-    #     if img.shape[-2::-1] > MONITOR_DIMS:
-    #         img = cv2.resize(img, MONITOR_DIMS)
-    #     cv2.imshow("Frame", img)
 
     # Check if any kill-related keyword is present in the extracted text
     if any(keyword.lower() in text.lower() for keyword in keywords):
@@ -215,44 +207,6 @@ def main(
         print()
 
 
-def cleanup(
-    original_path: str | Path,
-    processed_path: str | Path,
-    archive_path: str | Path,
-    final_output_path: str | Path,
-) -> None:
-    """Housekeeping. Move the original and result videos to their respective folders.
-
-    Parameters
-        - original_path (str): Path to the directory containing the original videos.
-        - processed_path (str): Path to the directory containing successfully processed videos.
-        - archive_path (str): Path to the directory where original videos are moved after processing.
-        - final_output_path (str): Path to the directory where processed videos are moved for final output.
-
-    The function moves successfully processed videos from the processed path to the final output path,
-    and original videos from the original path to the archive path. It also handles errors if files do not exist.
-    """
-    valid_extentions = {".mp4", ".mov", ".mkv"}
-    # Define path objects
-    original_dir = Path(original_path)
-    processed_dir = Path(processed_path)
-    final_out_dir = Path(final_output_path)
-
-    for processed_video in processed_dir.rglob("*.*"):
-        if processed_video.suffix in valid_extentions and processed_video.stat().st_size > 300:
-            # Move the processed video to the final output directory (if frames were written)
-            # If frames were not written, size of the file is 257 bytes
-            processed_video.rename(final_out_dir / processed_video.name)
-            # Find the original
-            original_video = Path(original_dir, processed_video.name.removeprefix("cv2_"))
-            if original_video.exists():
-                # Move the original video to the archive directory
-                original_video.rename(Path.joinpath(archive_path, original_video.name))
-            else:
-                print(f"\x1b[31mError: {original_video.name} does not exsist!\x1b[0m")
-                print(f"Original: {original_video!s}\t\tProcessed: {processed_video!s}")
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("PATH", help="Path to videos", type=str)
@@ -281,10 +235,3 @@ if __name__ == "__main__":
     archive_path = Path(str(input_path).replace("ssd", "hdd"))
 
     main(input_path=input_path, keywords=keywords, debug=args.debug)
-    if args.remove_originals:
-        cleanup(
-            original_path=args.PATH,
-            processed_path=args.output,
-            archive_path=archive_path,
-            final_output_path=args.output,
-        )
