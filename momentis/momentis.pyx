@@ -41,10 +41,8 @@ cdef bint name_in_killfeed(frame, list[str] keywords, roi_1):
     cdef str text, keyword
     # cdef Frame gray_frame, cropped_roi, concatted_img, thresh_1, thresh_2
     cdef unsigned short int x, t, w, h
-    # cdef list[ROI] rois = [roi_1, roi_2]
 
     x, y, w, h = roi_1
-
     cropped_roi = frame[y : y + h, x : x + w] # type: ignore
     # Crop the frame to the region of interest (rio)
     gray_frame = cv2.cvtColor(cropped_roi, cv2.COLOR_BGR2GRAY)
@@ -59,20 +57,7 @@ cdef bint name_in_killfeed(frame, list[str] keywords, roi_1):
         return True # type: ignore
     return False # type: ignore
 
-def name_in_feed(frame, list[str] keywords, killfeed_roi):
-    """Check if a name is present in the killfeed.
-
-
-    Parameters
-    ----------
-        frame (Frame): The frame to check.
-        - keywords (list[str]): List of keywords to search for.
-        - alternative_roi (ROI): Alternative region of interest for names.
-        - killfeed_roi (ROI): Region of interest for killfeed.
-        """
-    return name_in_feed(frame, keywords, killfeed_roi)
-
-cdef (unsigned int, unsigned short int) relevant_frames(str video_path, buffer: FrameBuffer, list[str] keywords): # -> tuple[list[int], int]:
+cdef tuple[list[int], unsigned int] relevant_frames(str video_path, FrameBuffer buffer, list[str] keywords): # -> tuple[list[int], int]:
     """Process a video and extracts frames that contain kill-related information.
 
     Parameters
@@ -123,9 +108,8 @@ cdef (unsigned int, unsigned short int) relevant_frames(str video_path, buffer: 
         buffer.add_frame(frame, count)
         # Check for killfeed every INTERVAL frames instead of each frame to save time/resources
         if count % INTERVAL == 0:
-            kill_detected, name = name_in_killfeed(frame, keywords, alternative_roi)
             # cv2.waitKey(1)
-            if kill_detected is True:
+            if name_in_killfeed(frame, keywords, killfeed_roi) is True:
                 msg = log_template.format("DETECT", "Kill found @", count)
                 print(f"{msg:>100}", end="\r")
                 # Write the past INTERVAL frames to the output video
@@ -146,21 +130,21 @@ cdef (unsigned int, unsigned short int) relevant_frames(str video_path, buffer: 
     return written_frames, fps
 
 
-def is_video(filepath: str) -> bool:
+cdef inline bint is_video(str filepath):
     """Check if the given file path points to a video file.
 
     Parameters
     ----------
         filepath (str | Path): The file path to check.
     """
-    return any(filepath.endswith(ext) for ext in VIDEO_EXTENSIONS)
+    return any(filepath.endswith(ext) for ext in VIDEO_EXTENSIONS) # type: ignore
 
 
 def main(
-    input_path: str,
-    keywords: list[str],
-    debug=False,
-    output_path: str | Path = "./opencv_output",
+    str input_path,
+    list[str] keywords,
+    bint debug=False,
+    str output_path = "./opencv_output",
 ) -> None:
     """Process videos and extract frames containing kill-related information.
 
@@ -170,10 +154,21 @@ def main(
         - debug (bool): If True, output a json file containing the frames written and their indices.
         - output_path (str): Output directory path to write the processed video and frames.
     """
+    cdef FrameBuffer buffer
+    cdef list[object] segments
+    cdef object clip
+    cdef object final_clip
+    cdef object log_file
+    cdef object output_video
+    cdef int fps
+    cdef list[object] continuous_frames
+    cdef list[object] subclips
+    cdef list[object] frames
+
 
     input_dir = Path(input_path)
     videos = [
-        Path(root, file) for root, _, files in input_dir.walk() for file in files if is_video(file)
+        Path(root, file) for root, _, files in os.walk(input_path) for file in files if is_video(file)
     ]
     if not videos:
         print("Error: No videos found in the provided directory.")
@@ -189,7 +184,7 @@ def main(
     for vid in videos:
         try:
             # File path definitions
-            output_video = Path(output_folder, f"cv2_{vid.name}")
+            output_video = Path(output_path, f"cv2_{vid.name}")
             # Check if video is already processed or corrupted
             if output_video.exists() and output_video.stat().st_size > 300:
                 print("Skipping existing video...")
@@ -197,7 +192,7 @@ def main(
             if output_video.exists() and output_video.stat().st_size < 300:
                 output_video.unlink()
             try:
-                continuous_frames, fps = relevant_frames(vid, buffer, keywords)
+                continuous_frames, fps = relevant_frames(str(vid), buffer, keywords)
                 if len(continuous_frames) == 0:
                     continue
             except FileNotFoundError:
