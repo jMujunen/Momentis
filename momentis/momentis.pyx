@@ -6,15 +6,20 @@ from pathlib import Path
 from collections import namedtuple
 import cv2
 import moviepy
-import pytesseract
-from numpy import ndarray
 
-from .utils import FrameBuffer, find_continuous_segments  # type: ignore
+from numpy cimport ndarray
+from cpython cimport bool
+from ._FrameBuffer cimport FrameBuffer
+
+ctypedef unsigned char[:, :, :] Frame
 
 # Constants
-INTERVAL = 60
-WRITER_FPS = 60
-BUFFER = 240
+cdef int INTERVAL = 120
+cdef int WRITER_FPS = 60
+cdef int BUFFER = 240
+cdef int ROI_W, ROI_H, ALT_W, ALT_H, NULLSIZE
+cdef public str log_template = "[{}] {} - Frame {}"
+
 ROI_W, ROI_H = (800, 200)
 ALT_W, ALT_H = (800, 200)
 
@@ -29,42 +34,10 @@ video_props = namedtuple("video_props", ["w", "h", "fps"])
 ROI = dimensions(w=800, h=200)
 
 region_of_interest = namedtuple("region_of_interest", ["x", "y", "w", "h"])
-log_template = "[{}] {} - Frame {}"
 
 
-def name_in_killfeed(
-    img: ndarray, keywords: list[str], *args: region_of_interest
-) -> tuple[bool, str]:
-    """Check if a kill-related keyword is present in the text extracted from the ndarray.
 
-    Parameters
-    -----------
-        - `img (ndarray)` : The image to extract text from
-        - `keywords (list[str])` : The keywords to search for in the text
-        - `*args (tuple[int])` : The region of interest(s) to extract text from in the format: x, y, w, h
-    """
-    preprocessed_frames = []
-    if args is not None:
-        for arg in args:
-            x, y, w, h = arg  # type: ignore
-            roi = img[y : y + h, x : x + w]
-            # Crop the frame to the region of interest (rio)
-            gray_frame = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-            preprocessed_frames.append(cv2.threshold(gray_frame, 175, 255, cv2.THRESH_BINARY)[1])
-            preprocessed_frames.append(
-                cv2.threshold(gray_frame, 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-            )
-
-    concatted_img = cv2.hconcat(preprocessed_frames)
-    text = pytesseract.image_to_string(concatted_img, lang="eng")
-
-    # Check if any kill-related keyword is present in the extracted text
-    if any(keyword.lower() in text.lower() for keyword in keywords):
-        return True, text.lower()
-    return False, text.lower()
-
-
-def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tuple[list[int], int]:
+cpdef tuple[list[int], int] relevant_frames(str video_path, FrameBuffer buffer, list[str] keywords):# -> tuple[list[int], int]:
     """Process a video and extracts frames that contain kill-related information.
 
     Parameters
@@ -76,11 +49,21 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
         tuple: a list of continue frame sequences that contain the desired frames
 
     """
+
+    cdef int count = 0
+    cdef int i = 0
+    cdef list[int] written_frames = []
+    cdef int ret
+    cdef Frame frame
+    cdef int _index
+    cdef tuple[ndarray, int] item
+
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         print(f"Error loading {video_path}")
         cap.release()
         raise FileNotFoundError
+
     # Define video properties
     props = video_props(
         w=int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
@@ -91,39 +74,33 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
     killfeed = region_of_interest(props.w - ROI.w, 75, ROI.w, ROI.h)
     alt_roi = region_of_interest((round(props.w * 0.35)), round(props.h * 0.6), ROI.w, ROI.h)
 
+
     # Extract vars from video
-    count = 0
-    agg = []
-    # cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
-    written_frames = []
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
 
-        buffer.add_frame((frame, count))
+        buffer.add_frame(count)
         # Check for killfeed every INTERVAL frames instead of each frame to save time/resources
-        if count % INTERVAL == 0:
-            kill_detected, _ = name_in_killfeed(frame, keywords, alt_roi, killfeed)
-            # cv2.waitKey(1)
-            if kill_detected is True:
+        if i == INTERVAL:
+            i = 0
+            for _index in buffer.exec(keywords, killfeed):
                 msg = log_template.format("DETECT", "Kill found @", count)
                 print(f"{msg:>100}", end="\r")
                 # Write the past INTERVAL frames to the output video
-                for _buffered_frame, index in buffer.get_frames():
-                    if index not in written_frames:
-                        msg = log_template.format("WRITE", "Wrote frame", index)
-                        written_frames.append(index)
-                    else:
-                        msg = log_template.format("SKIPPED", "Duplicate frame", index)
-                    print(f"{msg:<50}", end="\r")
-            else:
-                msg = log_template.format("SKIPPED", "No kill", count)
+                if _index not in written_frames:
+                    msg = log_template.format("WRITE", "Wrote frame", _index)
+                    written_frames.append(_index)
+                else:
+                    msg = log_template.format("SKIPPED", "Duplicate frame", _index)
+                print(f"{msg:<40}", end="\r")
         else:
             msg = log_template.format("INFO", "Current", count)
             print(f"{msg:<40}", end="\r")
 
         count += 1
+        i +=1
     cv2.destroyAllWindows()
     return written_frames, props.fps
 
@@ -135,14 +112,14 @@ def is_video(filepath: str) -> bool:
     ----------
         filepath (str | Path): The file path to check.
     """
-    return any(filepath.endswith(ext) for ext in VIDEO_EXTENSIONS)
+    return any(filepath.endswith(ext) for ext in VIDEO_EXTENSIONS) # type: ignore
 
 
 def main(
-    input_path: str,
-    keywords: list[str],
-    debug=False,
-    output_path: str | Path = "./opencv_output",
+    str input_path,
+    list[str] keywords,
+    bool debug=False, # type: ignore
+    str output_path="./opencv_output",
 ) -> None:
     """Process videos and extract frames containing kill-related information.
 
@@ -152,6 +129,11 @@ def main(
         - debug (bool): If True, output a json file containing the frames written and their indices.
         - output_path (str): Output directory path to write the processed video and frames.
     """
+    cdef list[object] videos
+    cdef FrameBuffer buffer
+    cdef list[int] continuous_frames
+    cdef int fps
+    cdef list[list[int]] segments
 
     input_dir = Path(input_path)
     videos = [
@@ -179,7 +161,7 @@ def main(
             if output_video.exists() and output_video.stat().st_size < NULLSIZE:
                 output_video.unlink()
             try:
-                continuous_frames, fps = relevant_frames(vid, buffer, keywords)
+                continuous_frames, fps = relevant_frames(str(vid), buffer, keywords)
                 if len(continuous_frames) == 0:
                     continue
             except FileNotFoundError:
@@ -187,33 +169,33 @@ def main(
             except Exception as e:
                 print(f"Error processing continuous frames {vid.name}: {e}")
                 continue
-            # Extract continuous frame sequences from set of frames
-            segments = sorted(find_continuous_segments(continuous_frames))
-            clip = moviepy.VideoFileClip(str(vid))
-            # Get the audio from the original video
-            audio = clip.audio
-            # Create a single video clip for each segment of continuous frames
-            subclips = [
-                clip.subclipped(segment[0] / fps, segment[-1] / fps) for segment in segments
-            ]
-            if len(subclips) > 0:
-                try:
-                    # Write the video and audio to a new file
-                    final_clip = moviepy.concatenate_videoclips(subclips, method="compose")
-                    final_clip.write_videofile(
-                        str(output_video),
-                        codec="libx265",
-                        audio_codec="aac",
-                        remove_temp=True,
-                        audio=True,
-                    )
-                except Exception as e:
-                    print(f"Error writing subclips {vid.name}: {e}")
-            clip.close()
-            if debug:
-                # Write sequence to file for debugging
-                log_file = Path(output_folder, f".{output_video.name}.log")
-                log_file.write_text(json.dumps(segments))
+            # # Extract continuous frame sequences from set of frames
+            # segments = sorted(find_continuous_segments(continuous_frames))
+            # clip = moviepy.VideoFileClip(str(vid))
+            # # Get the audio from the original video
+            # audio = clip.audio
+            # # Create a single video clip for each segment of continuous frames
+            # subclips = [
+            #     clip.subclipped(segment[0] / fps, segment[-1] / fps) for segment in segments
+            # ]
+            # if len(subclips) > 0:
+            #     try:
+            #         # Write the video and audio to a new file
+            #         final_clip = moviepy.concatenate_videoclips(subclips, method="compose")
+            #         final_clip.write_videofile(
+            #             str(output_video),
+            #             codec="libx265",
+            #             audio_codec="aac",
+            #             remove_temp=True,
+            #             audio=True,
+            #         )
+            #     except Exception as e:
+            #         print(f"Error writing subclips {vid.name}: {e}")
+            # clip.close()
+            # if debug:
+            #     # Write sequence to file for debugging
+            #     log_file = Path(output_folder, f".{output_video.name}.log")
+            #     log_file.write_text(json.dumps(segments))
         except Exception as e:
             print(f"Error processing video {vid.name}: {e}")
         print()
@@ -242,10 +224,32 @@ if __name__ == "__main__":
     keywords = [
         word
         for word in keywords_file.read_text().splitlines()
-        if not word.startswith("#", ";", "/")
+        if not word.startswith(("#", ";", "/"))
     ]
 
     input_path = Path(args.PATH)
     archive_path = Path(str(input_path).replace("ssd", "hdd"))
 
-    main(input_path=input_path, keywords=keywords, debug=args.debug)
+    main(input_path=str(input_path), keywords=keywords, debug=args.debug)
+
+
+cdef list[list[int]] find_continuous_segments(list[int] frames_index):# -> list[list[int]]:
+    """Find continuous segments of frames.
+
+    Args:
+        frames (list[int]): A list of integers representing frames.
+
+    Returns:
+
+        list[list[int]]: A list of lists, where each sublist represents a continuous segment of frames.
+    """
+    if not frames_index:
+        return []
+
+    segments = [[frames_index[0]]]
+    for i in range(1, len(frames_index)):
+        if frames_index[i] == frames_index[i - 1] + 1:
+            segments[-1].append(frames_index[i])
+        else:
+            segments.append([frames_index[i]])
+    return segments
