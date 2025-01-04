@@ -3,7 +3,7 @@ import argparse
 import json
 import os
 from pathlib import Path
-
+from collections import namedtuple
 import cv2
 import moviepy
 import pytesseract
@@ -21,8 +21,20 @@ ALT_W, ALT_H = (800, 200)
 MONITOR_DIMS = (1920, 1080)
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv"}
 
+NULLSIZE = 300
 
-def name_in_killfeed(img: ndarray, keywords: list[str], *args: tuple[int, ...]) -> tuple[bool, str]:
+dimensions = namedtuple("dimensions", ["w", "h"])
+video_props = namedtuple("video_props", ["w", "h", "fps"])
+
+ROI = dimensions(w=800, h=200)
+
+region_of_interest = namedtuple("region_of_interest", ["x", "y", "w", "h"])
+log_template = "[{}] {} - Frame {}"
+
+
+def name_in_killfeed(
+    img: ndarray, keywords: list[str], *args: region_of_interest
+) -> tuple[bool, str]:
     """Check if a kill-related keyword is present in the text extracted from the ndarray.
 
     Parameters
@@ -69,17 +81,15 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
         print(f"Error loading {video_path}")
         cap.release()
         raise FileNotFoundError
-
-    log_template = "[{}] {} - Frame {}"
-
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = round(cap.get(cv2.CAP_PROP_FPS))
-
+    # Define video properties
+    props = video_props(
+        w=int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+        h=int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+        fps=round(cap.get(cv2.CAP_PROP_FPS)),
+    )
     # Define region of interest
-    killfeed_roi = (width - ROI_W, 75, ROI_W, ROI_H)
-    alt_x, alt_y = (round(width * 0.35), round(height * 0.6))
-    alternative_roi = (alt_x, alt_y, ALT_W, ALT_H)
+    killfeed = region_of_interest(props.w - ROI.w, 75, ROI.w, ROI.h)
+    alt_roi = region_of_interest((round(props.w * 0.35)), round(props.h * 0.6), ROI.w, ROI.h)
 
     # Extract vars from video
     count = 0
@@ -93,7 +103,7 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
         buffer.add_frame((frame, count))
         # Check for killfeed every INTERVAL frames instead of each frame to save time/resources
         if count % INTERVAL == 0:
-            kill_detected, name = name_in_killfeed(frame, keywords, alternative_roi, killfeed_roi)
+            kill_detected, name = name_in_killfeed(frame, keywords, alt_roi, killfeed)
             # cv2.waitKey(1)
             if kill_detected is True:
                 msg = log_template.format("DETECT", "Kill found @", count)
@@ -113,7 +123,7 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
 
         count += 1
     cv2.destroyAllWindows()
-    return written_frames, fps
+    return written_frames, props.fps
 
 
 def is_video(filepath: str) -> bool:
@@ -161,10 +171,10 @@ def main(
             # File path definitions
             output_video = Path(output_folder, f"cv2_{vid.name}")
             # Check if video is already processed or corrupted
-            if output_video.exists() and output_video.stat().st_size > 300:
+            if output_video.exists() and output_video.stat().st_size > NULLSIZE:
                 print("Skipping existing video...")
                 continue
-            if output_video.exists() and output_video.stat().st_size < 300:
+            if output_video.exists() and output_video.stat().st_size < NULLSIZE:
                 output_video.unlink()
             try:
                 continuous_frames, fps = relevant_frames(vid, buffer, keywords)
@@ -190,7 +200,7 @@ def main(
                     final_clip = moviepy.concatenate_videoclips(subclips, method="compose")
                     final_clip.write_videofile(
                         str(output_video),
-                        codec="libx264",
+                        codec="libx265",
                         audio_codec="aac",
                         remove_temp=True,
                         audio=True,
@@ -228,7 +238,9 @@ if __name__ == "__main__":
         raise FileNotFoundError
 
     keywords = [
-        word for word in keywords_file.read_text().splitlines() if word[0] not in {"#", ";", "/"}
+        word
+        for word in keywords_file.read_text().splitlines()
+        if not word.startswith("#", ";", "/")
     ]
 
     input_path = Path(args.PATH)
