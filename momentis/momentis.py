@@ -93,6 +93,7 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
 
     # Extract vars from video
     count = 0
+    agg = []
     # cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
     written_frames = []
     while cap.isOpened():
@@ -103,7 +104,7 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
         buffer.add_frame((frame, count))
         # Check for killfeed every INTERVAL frames instead of each frame to save time/resources
         if count % INTERVAL == 0:
-            kill_detected, name = name_in_killfeed(frame, keywords, alt_roi, killfeed)
+            kill_detected, _ = name_in_killfeed(frame, keywords, alt_roi, killfeed)
             # cv2.waitKey(1)
             if kill_detected is True:
                 msg = log_template.format("DETECT", "Kill found @", count)
@@ -113,8 +114,9 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
                     if index not in written_frames:
                         msg = log_template.format("WRITE", "Wrote frame", index)
                         written_frames.append(index)
+                    else:
                         msg = log_template.format("SKIPPED", "Duplicate frame", index)
-                        print(f"{msg:<50}", end="\r")
+                    print(f"{msg:<50}", end="\r")
             else:
                 msg = log_template.format("SKIPPED", "No kill", count)
         else:

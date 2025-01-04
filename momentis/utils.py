@@ -1,5 +1,9 @@
 from collections import deque
 from numpy import ndarray
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections.abc import Callable, Generator
+import cv2
+import pytesseract
 
 
 def find_continuous_segments(frames: list[int]) -> list[list[int]]:
@@ -86,3 +90,42 @@ class FrameBuffer:
 
     def __len__(self) -> int:
         return len(self.buffer)
+
+    def exec(
+        self, keywords: list[str], *args: tuple[int, ...]
+    ):  # -> Generator[ndarray, None, None]:
+        """Execute a function on the aggregated data.
+
+        Args:
+            func (Callable): The function to apply to each frame.
+            *args: Positional arguments to pass to the function.
+            **kwargs: Keyword arguments to pass to the function.
+        """
+
+        def func(
+            frame: ndarray, keywords: list[str], region_of_interst: tuple[int, int, int, int]
+        ) -> bool:
+            preprocessed_frames = []
+            x, y, w, h = region_of_interst  # type: ignore
+            roi = frame[y : y + h, x : x + w]
+            # Crop the frame to the region of interest (rio)
+            gray_frame = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+            preprocessed_frames.append(cv2.threshold(gray_frame, 175, 255, cv2.THRESH_BINARY)[1])
+            preprocessed_frames.append(
+                cv2.threshold(gray_frame, 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+            )
+
+            concatted_img = cv2.hconcat(preprocessed_frames)
+            text = pytesseract.image_to_string(concatted_img, lang="eng")
+            # Check if any kill-related keyword is present in the extracted text
+            return bool(any(keyword.lower() in text.lower() for keyword in keywords))
+
+        with ThreadPoolExecutor() as executor:
+            futures = [
+                executor.submit(func, frame, keywords, *args) for _, frame in self.get_frames()
+            ]
+            for future in as_completed(futures):
+                result = future.result()
+                if result:
+                    return self.get_frames()
+        return []
