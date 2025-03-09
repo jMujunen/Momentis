@@ -6,6 +6,7 @@ from collections import namedtuple
 import cv2
 import moviepy
 from numpy import ndarray
+import time
 
 try:
     from .utils import FrameBuffer, find_continuous_segments  # type: ignore
@@ -18,7 +19,7 @@ from decorators import exectimer
 tess_api = PyTessBaseAPI()
 
 # Constants
-INTERVAL = 60
+INTERVAL = 30
 WRITER_FPS = 60
 BUFFER = 240
 ROI_W, ROI_H = (800, 200)
@@ -76,20 +77,26 @@ def name_in_killfeed(
         - `*args (tuple[int])` : The region of interest(s) to extract text from in the format: x, y, w, h
     """
     preprocessed_frames = []
+    thresholded_frames = []
+    gray_frames = []
     if args is not None:
         for arg in args:
             x, y, w, h = arg  # type: ignore
             roi = img[y : y + h, x : x + w]
             # Crop the frame to the region of interest (rio)
-            gray_frame = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-            preprocessed_frames.append(cv2.threshold(gray_frame, 175, 255, cv2.THRESH_BINARY)[1])
-            preprocessed_frames.append(
-                cv2.threshold(gray_frame, 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-            )
+            gray_frames.append(cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY))
 
-    concatted_img = cv2.hconcat(preprocessed_frames)
-    # text = pytesseract.image_to_string(concatted_img, lang="eng")
-    text = ocr(concatted_img)
+    thresholded_frames.extend(
+        list(map(lambda x: cv2.threshold(x, 60, 255, cv2.THRESH_BINARY)[1], gray_frames))
+    )
+    thresholded_frames.extend(
+        list(map(lambda x: cv2.threshold(x, 160, 255, cv2.THRESH_BINARY)[1], gray_frames))
+    )
+
+    text = " ".join(map(ocr, thresholded_frames))
+
+    cv2.imshow("FRAME", cv2.hconcat(thresholded_frames))
+
     # Check if any kill-related keyword is present in the extracted text
     if any(keyword.lower() in text.lower() for keyword in keywords):
         return True, text.lower()
@@ -137,13 +144,14 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
 
         buffer.add_frame((frame, count))
         # Check for killfeed every INTERVAL frames instead of each frame to save time/resources
-        if count % INTERVAL == 0:
+        if count % INTERVAL == 0 or num_frames - count == 30:
             kill_detected, name = name_in_killfeed(frame, keywords, alt_roi, killfeed)
+            print("======== DETECTING KILLFEED ======", count - num_frames)
+            print("\t".join(name.split()))
 
-            # cv2.waitKey(1)
             if kill_detected is True:
                 msg = log_template.format("DETECT", "Kill found @", count)
-                print(f"{msg:>100}", end="\r")
+                print(f"{msg:>100}", end="\n")
                 # Write the past INTERVAL frames to the output video
                 for _buffered_frame, index in buffer.get_frames():
                     if index not in written_frames:
@@ -155,10 +163,15 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
                 msg = log_template.format("SKIPPED", "No kill", count)
         else:
             msg = log_template.format("INFO", "Current", count)
-            # print(f"{msg:<40}", end="\r") # debug
+            print(f"{msg:<40}", end="\n")  # debug
 
         count += 1
-        pb.increment()
+        try:
+            if count > 1600 and cv2.waitKey() & 0xFF == ord("q"):
+                continue
+        except KeyboardInterrupt:
+            break
+        # pb.increment()
     cv2.destroyAllWindows()
     return written_frames, props.fps
 
@@ -222,6 +235,7 @@ def main(
             except Exception as e:
                 print(f"Error processing continuous frames {vid.name}: {e}")
                 continue
+            break
             # Extract continuous frame sequences from set of frames
             segments = sorted(find_continuous_segments(continuous_frames))
             clip = moviepy.VideoFileClip(str(vid))
