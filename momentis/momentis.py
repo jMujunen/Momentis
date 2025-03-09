@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import os
 from pathlib import Path
 from collections import namedtuple
 import cv2
 import moviepy
-import pytesseract
 from numpy import ndarray
 
-from .utils import FrameBuffer, find_continuous_segments  # type: ignore
+try:
+    from .utils import FrameBuffer, find_continuous_segments  # type: ignore
+except ImportError:
+    from utils import FrameBuffer, find_continuous_segments
+from ProgressBar import ProgressBar  # Update deps to include this custom module
+from tesserocr import PyTessBaseAPI
+from decorators import exectimer
+
+tess_api = PyTessBaseAPI()
 
 # Constants
 INTERVAL = 60
@@ -30,6 +36,32 @@ ROI = dimensions(w=800, h=200)
 
 region_of_interest = namedtuple("region_of_interest", ["x", "y", "w", "h"])
 log_template = "[{}] {} - Frame {}"
+
+
+def ocr(np_image: ndarray) -> str:
+    """Perform OCR on a numpy image using Tesseract.
+
+    Args:
+        np_image (ndarray): The numpy image to perform OCR on.
+        tess_api (PyTessBaseAPI): The Tesseract API instance.
+
+    Returns:
+        str: The OCR result.
+    """
+
+    # bpp = 3 if len(np_image.shape) > 2 else 1
+    # bpl = bpp * w
+
+    tess_api.SetImageBytes(
+        imagedata=np_image.tobytes(),
+        width=np_image.shape[1],
+        height=np_image.shape[0],
+        bytes_per_pixel=1,
+        bytes_per_line=np_image.shape[1],
+        # bytes_per_line=bpl,
+    )
+    tess_api.Recognize()
+    return tess_api.GetUTF8Text()
 
 
 def name_in_killfeed(
@@ -56,14 +88,15 @@ def name_in_killfeed(
             )
 
     concatted_img = cv2.hconcat(preprocessed_frames)
-    text = pytesseract.image_to_string(concatted_img, lang="eng")
-
+    # text = pytesseract.image_to_string(concatted_img, lang="eng")
+    text = ocr(concatted_img)
     # Check if any kill-related keyword is present in the extracted text
     if any(keyword.lower() in text.lower() for keyword in keywords):
         return True, text.lower()
     return False, text.lower()
 
 
+@exectimer
 def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tuple[list[int], int]:
     """Process a video and extracts frames that contain kill-related information.
 
@@ -87,6 +120,8 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
         h=int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
         fps=round(cap.get(cv2.CAP_PROP_FPS)),
     )
+    num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    pb = ProgressBar(num_frames)
     # Define region of interest
     killfeed = region_of_interest(props.w - ROI.w, 75, ROI.w, ROI.h)
     alt_roi = region_of_interest((round(props.w * 0.35)), round(props.h * 0.6), ROI.w, ROI.h)
@@ -104,6 +139,7 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
         # Check for killfeed every INTERVAL frames instead of each frame to save time/resources
         if count % INTERVAL == 0:
             kill_detected, name = name_in_killfeed(frame, keywords, alt_roi, killfeed)
+
             # cv2.waitKey(1)
             if kill_detected is True:
                 msg = log_template.format("DETECT", "Kill found @", count)
@@ -114,14 +150,15 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
                         msg = log_template.format("WRITE", "Wrote frame", index)
                         written_frames.append(index)
                         msg = log_template.format("SKIPPED", "Duplicate frame", index)
-                        print(f"{msg:<50}", end="\r")
+                        # print(f"{msg:<50}", end="\r") # debug
             else:
                 msg = log_template.format("SKIPPED", "No kill", count)
         else:
             msg = log_template.format("INFO", "Current", count)
-            print(f"{msg:<40}", end="\r")
+            # print(f"{msg:<40}", end="\r") # debug
 
         count += 1
+        pb.increment()
     cv2.destroyAllWindows()
     return written_frames, props.fps
 
@@ -133,14 +170,14 @@ def is_video(filepath: str) -> bool:
     ----------
         filepath (str | Path): The file path to check.
     """
-    return any(filepath.endswith(ext) for ext in VIDEO_EXTENSIONS)
+    return any(filepath.lower().endswith(ext) for ext in VIDEO_EXTENSIONS)
 
 
 def main(
     input_path: str,
     keywords: list[str],
+    output_path: str | Path,
     debug=False,
-    output_path: str | Path = "./opencv_output",
 ) -> None:
     """Process videos and extract frames containing kill-related information.
 
@@ -200,10 +237,23 @@ def main(
                     final_clip = moviepy.concatenate_videoclips(subclips, method="compose")
                     final_clip.write_videofile(
                         str(output_video),
-                        codec="libx265",
-                        audio_codec="aac",
+                        codec="hevc_nvenc",
+                        temp_audiofile_path="/tmp/",
+                        threads=18,
+                        # audio_codec="aac",
                         remove_temp=True,
                         audio=True,
+                        ffmpeg_params=[
+                            "-c:v",
+                            "hevc_nvenc",
+                            "-b:v",
+                            "12000k",
+                            "-y",
+                            "-loglevel",
+                            "error",
+                            "-pix_fmt",
+                            "yuv420p",
+                        ],
                     )
                 except Exception as e:
                     print(f"Error writing subclips {vid.name}: {e}")
@@ -220,7 +270,9 @@ def main(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("PATH", help="Path to videos", type=str)
-    parser.add_argument("--output", help="Output folder")
+    parser.add_argument(
+        "--output", help="Output folder. Default is {PATH}/opencv_output", default=None
+    )
     parser.add_argument(
         "--archive",
         help="Move original videos to this path after processing",
@@ -240,10 +292,11 @@ if __name__ == "__main__":
     keywords = [
         word
         for word in keywords_file.read_text().splitlines()
-        if not word.startswith("#", ";", "/")
+        if not word.startswith(("#", ";", "/"))
     ]
 
     input_path = Path(args.PATH)
     archive_path = Path(str(input_path).replace("ssd", "hdd"))
+    output_path = Path(args.output) if args.output is not None else input_path / "opencv_output"
 
-    main(input_path=input_path, keywords=keywords, debug=args.debug)
+    main(input_path=input_path, keywords=keywords, debug=args.debug, output_path=args.output)
