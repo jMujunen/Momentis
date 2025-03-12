@@ -14,8 +14,10 @@ except ImportError:
     from utils import FrameBuffer, find_continuous_segments
 from ProgressBar import ProgressBar  # Update deps to include this custom module
 from tesserocr import PyTessBaseAPI
+import tesserocr
 from decorators import exectimer
 
+tesserocr.set_leptonica_log_level(tesserocr.LeptLogLevel.NONE)
 tess_api = PyTessBaseAPI()
 
 # Constants
@@ -76,8 +78,7 @@ def name_in_killfeed(
         - `keywords (list[str])` : The keywords to search for in the text
         - `*args (tuple[int])` : The region of interest(s) to extract text from in the format: x, y, w, h
     """
-    preprocessed_frames = []
-    thresholded_frames = []
+    threshold_frames = []
     gray_frames = []
     if args is not None:
         for arg in args:
@@ -86,16 +87,16 @@ def name_in_killfeed(
             # Crop the frame to the region of interest (rio)
             gray_frames.append(cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY))
 
-    thresholded_frames.extend(
+    threshold_frames.extend(
         list(map(lambda x: cv2.threshold(x, 60, 255, cv2.THRESH_BINARY)[1], gray_frames))
     )
-    thresholded_frames.extend(
-        list(map(lambda x: cv2.threshold(x, 160, 255, cv2.THRESH_BINARY)[1], gray_frames))
+    threshold_frames.extend(
+        list(map(lambda x: cv2.threshold(x, 120, 255, cv2.THRESH_BINARY)[1], gray_frames))
     )
 
-    text = " ".join(map(ocr, thresholded_frames))
+    text = " ".join(map(ocr, threshold_frames))
 
-    cv2.imshow("FRAME", cv2.hconcat(thresholded_frames))
+    cv2.imshow("FRAME", cv2.hconcat(threshold_frames))
 
     # Check if any kill-related keyword is present in the extracted text
     if any(keyword.lower() in text.lower() for keyword in keywords):
@@ -103,7 +104,6 @@ def name_in_killfeed(
     return False, text.lower()
 
 
-@exectimer
 def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tuple[list[int], int]:
     """Process a video and extracts frames that contain kill-related information.
 
@@ -141,17 +141,15 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
         ret, frame = cap.read()
         if not ret:
             break
-
         buffer.add_frame((frame, count))
         # Check for killfeed every INTERVAL frames instead of each frame to save time/resources
-        if count % INTERVAL == 0 or num_frames - count == 30:
+        if count % INTERVAL == 0 or num_frames - count == 1:
             kill_detected, name = name_in_killfeed(frame, keywords, alt_roi, killfeed)
-            print("======== DETECTING KILLFEED ======", count - num_frames)
-            print("\t".join(name.split()))
-
+            # print("======== DETECTING KILLFEED ======", count - num_frames)
+            # print("\t".join(name.split()))
             if kill_detected is True:
                 msg = log_template.format("DETECT", "Kill found @", count)
-                print(f"{msg:>100}", end="\n")
+                print(f"{msg:>80}", end="\n")
                 # Write the past INTERVAL frames to the output video
                 for _buffered_frame, index in buffer.get_frames():
                     if index not in written_frames:
@@ -163,15 +161,9 @@ def relevant_frames(video_path: Path, buffer: FrameBuffer, keywords: list) -> tu
                 msg = log_template.format("SKIPPED", "No kill", count)
         else:
             msg = log_template.format("INFO", "Current", count)
-            print(f"{msg:<40}", end="\n")  # debug
-
+            # print(f"{msg:<40}", end="\n")  # debug
         count += 1
-        try:
-            if count > 1600 and cv2.waitKey() & 0xFF == ord("q"):
-                continue
-        except KeyboardInterrupt:
-            break
-        # pb.increment()
+        pb.increment()
     cv2.destroyAllWindows()
     return written_frames, props.fps
 
@@ -235,7 +227,6 @@ def main(
             except Exception as e:
                 print(f"Error processing continuous frames {vid.name}: {e}")
                 continue
-            break
             # Extract continuous frame sequences from set of frames
             segments = sorted(find_continuous_segments(continuous_frames))
             clip = moviepy.VideoFileClip(str(vid))
