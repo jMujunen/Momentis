@@ -1,5 +1,16 @@
 from collections import deque
 from numpy import ndarray
+import cv2
+
+
+def show_threshold(func):
+    def inner(img: ndarray, keywords: list[str], *args):
+        _bool, _txt = func(img, keywords, *args)
+        cv2.waitKey(1)
+        cv2.destroyAllWindows()
+        return _bool, _txt
+
+    return inner
 
 
 def find_continuous_segments(frames: list[int]) -> list[list[int]]:

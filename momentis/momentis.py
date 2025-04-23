@@ -12,22 +12,21 @@ from ThreadPoolHelper import Pool
 
 
 try:
-    from .utils import FrameBuffer, find_continuous_segments  # type: ignore
+    from .utils import FrameBuffer, find_continuous_segments, show_threshold  # type: ignore
 except ImportError:
-    from utils import FrameBuffer, find_continuous_segments  # type: ignore
+    from utils import FrameBuffer, find_continuous_segments, show_threshold  # type: ignore
 
 import tesserocr
 from tesserocr import PyTessBaseAPI
 
 tesserocr.set_leptonica_log_level(tesserocr.LeptLogLevel.NONE)
 tess_api = PyTessBaseAPI()
+cv2.setLogLevel(1)
 
 # Constants
 INTERVAL = 60
 WRITER_FPS = 60
 BUFFER = 240
-ROI_W, ROI_H = (800, 200)
-ALT_W, ALT_H = (800, 200)
 NULLSIZE = 300
 
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv"}
@@ -36,9 +35,9 @@ VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv"}
 dimensions = namedtuple("dimensions", ["w", "h"])
 video_props = namedtuple("video_props", ["w", "h", "fps"])
 
-ROI = dimensions(w=800, h=200)
+ROI_SIZE = dimensions(w=800, h=200)
 
-region_of_interest = namedtuple("region_of_interest", ["x", "y", "w", "h"])
+roi = namedtuple("region_of_interest", ["x", "y", "w", "h"])
 log_template = "[{}] {} - Frame {}"
 
 
@@ -64,9 +63,8 @@ def ocr(np_image: ndarray) -> str:
     return tess_api.GetUTF8Text()
 
 
-def name_in_killfeed(
-    img: ndarray, keywords: list[str], *args: region_of_interest
-) -> tuple[bool, str]:
+# @show_threshold
+def name_in_killfeed(img: ndarray, keywords: list[str], *args: roi) -> tuple[bool, str]:
     """Check if a kill-related keyword is present in the text extracted from the ndarray.
 
     Parameters
@@ -90,15 +88,23 @@ def name_in_killfeed(
     threshold_frames.extend(
         list(map(lambda x: cv2.threshold(x, 120, 255, cv2.THRESH_BINARY)[1], gray_frames))
     )
-
+    print(len(threshold_frames))
     text = " ".join(map(ocr, threshold_frames))
+    hcat1 = cv2.hconcat(threshold_frames)[:2]
+    hcat2 = cv2.hconcat(threshold_frames)[2:]
+    thresh_img = cv2.vconcat([hcat1, hcat2])
+    cv2.imshow("Threshold Frames", thresh_img)
+    cv2.waitKey()
+    cv2.destroyAllWindows()
 
+    # momentis/momentis.py
     # Check if any kill-related keyword is present in the extracted text
     if any(keyword.lower() in text.lower() for keyword in keywords):
         return True, text.lower()
     return False, text.lower()
 
 
+@exectimer
 def relevant_frames(
     video_path: Path, buffer: FrameBuffer, keywords: list[str]
 ) -> tuple[list[int], int]:
@@ -126,8 +132,8 @@ def relevant_frames(
     )
     num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     # Define region of interest
-    killfeed = region_of_interest(props.w - ROI.w, 75, ROI.w, ROI.h)
-    alt_roi = region_of_interest((round(props.w * 0.35)), round(props.h * 0.6), ROI.w, ROI.h)
+    killfeed = roi(props.w - ROI_SIZE.w, 75, ROI_SIZE.w, ROI_SIZE.h)
+    alt_roi = roi((round(props.w * 0.35)), round(props.h * 0.6), ROI_SIZE.w, ROI_SIZE.h)
 
     # Extract vars from video
     count = 0
@@ -175,7 +181,8 @@ def is_video(filepath: str) -> bool:
 def main(input_path: str, keywords: list[str], output_path: str | Path, debug=False) -> None:
     """Process videos and extract frames containing kill-related information.
 
-    Parameters
+    Args:
+    ----
         - input_path (str): Path to the directory containing video files.
         - keywords (list[str]): List of keywords related to kill feeds.
         - output_path (str): Output directory path to write the processed video and frames.
