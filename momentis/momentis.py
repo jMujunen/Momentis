@@ -7,14 +7,16 @@ import cv2
 import moviepy
 from numpy import ndarray
 from decorators import exectimer
-
+from tqdm import tqdm
 from ThreadPoolHelper import Pool
+
+import logging
 
 
 try:
-    from .utils import FrameBuffer, find_continuous_segments, show_threshold  # type: ignore
+    from .utils import FrameBuffer, find_continuous_segments, VideoReader
 except ImportError:
-    from utils import FrameBuffer, find_continuous_segments, show_threshold  # type: ignore
+    from utils import FrameBuffer, find_continuous_segments, VideoReader  # type: ignore
 
 import tesserocr
 from tesserocr import PyTessBaseAPI
@@ -23,10 +25,13 @@ tesserocr.set_leptonica_log_level(tesserocr.LeptLogLevel.NONE)
 tess_api = PyTessBaseAPI()
 cv2.setLogLevel(1)
 
+logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
+
 # Constants
-INTERVAL = 60
+INTERVAL = 30
 WRITER_FPS = 60
-BUFFER = 240
+BUFFER = 360
 NULLSIZE = 300
 
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv"}
@@ -39,6 +44,8 @@ ROI_SIZE = dimensions(w=800, h=200)
 
 roi = namedtuple("region_of_interest", ["x", "y", "w", "h"])
 log_template = "[{}] {} - Frame {}"
+
+DEBUG = False
 
 
 def ocr(np_image: ndarray) -> str:
@@ -63,7 +70,6 @@ def ocr(np_image: ndarray) -> str:
     return tess_api.GetUTF8Text()
 
 
-# @show_threshold
 def name_in_killfeed(img: ndarray, keywords: list[str], *args: roi) -> tuple[bool, str]:
     """Check if a kill-related keyword is present in the text extracted from the ndarray.
 
@@ -86,22 +92,21 @@ def name_in_killfeed(img: ndarray, keywords: list[str], *args: roi) -> tuple[boo
         list(map(lambda x: cv2.threshold(x, 60, 255, cv2.THRESH_BINARY)[1], gray_frames))
     )
     threshold_frames.extend(
-        list(map(lambda x: cv2.threshold(x, 120, 255, cv2.THRESH_BINARY)[1], gray_frames))
+        list(map(lambda x: cv2.threshold(x, 225, 255, cv2.THRESH_BINARY)[1], gray_frames))
     )
-    print(len(threshold_frames))
-    text = " ".join(map(ocr, threshold_frames))
-    hcat1 = cv2.hconcat(threshold_frames)[:2]
-    hcat2 = cv2.hconcat(threshold_frames)[2:]
-    thresh_img = cv2.vconcat([hcat1, hcat2])
-    cv2.imshow("Threshold Frames", thresh_img)
-    cv2.waitKey()
-    cv2.destroyAllWindows()
+    text = " ".join(map(ocr, threshold_frames)).replace("\n", "\t").lower()
+    if DEBUG:
+        cv2.imshow(
+            "Thresholded Frames", cv2.vconcat([*threshold_frames[2:], *threshold_frames[:2]])
+        )
+        cv2.waitKey(1)
+    # cv2.destroyAllWindows()
 
     # momentis/momentis.py
     # Check if any kill-related keyword is present in the extracted text
-    if any(keyword.lower() in text.lower() for keyword in keywords):
-        return True, text.lower()
-    return False, text.lower()
+    if any(keyword.lower() in text for keyword in keywords):
+        return True, text
+    return False, text
 
 
 @exectimer
@@ -119,18 +124,18 @@ def relevant_frames(
         tuple[list[int], int]: a list of continue frame sequences that contain the desired frames
 
     """
-    cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
+    reader = VideoReader(str(video_path))
+    if not reader.cap.isOpened():
         print(f"Error loading {video_path}")
-        cap.release()
+        reader.cap.release()
         raise FileNotFoundError
     # Define video properties
     props = video_props(
-        w=int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-        h=int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-        fps=round(cap.get(cv2.CAP_PROP_FPS)),
+        w=int(reader.cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+        h=int(reader.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+        fps=round(reader.cap.get(cv2.CAP_PROP_FPS)),
     )
-    num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    num_frames = int(reader.cap.get(cv2.CAP_PROP_FRAME_COUNT))
     # Define region of interest
     killfeed = roi(props.w - ROI_SIZE.w, 75, ROI_SIZE.w, ROI_SIZE.h)
     alt_roi = roi((round(props.w * 0.35)), round(props.h * 0.6), ROI_SIZE.w, ROI_SIZE.h)
@@ -139,33 +144,57 @@ def relevant_frames(
     count = 0
     # cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
     written_frames = []
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-        buffer.add_frame((frame, count))
-        # Check for killfeed every INTERVAL frames instead of each frame to save time/resources
-        if count % INTERVAL == 0 or num_frames - count == 1:
-            if "Counter" in video_path.name:
-                kill_detected, name = name_in_killfeed(frame, keywords, killfeed)
-            else:
-                kill_detected, name = name_in_killfeed(frame, keywords, alt_roi, killfeed)
-            if kill_detected is True:
-                msg = log_template.format("DETECT", "Kill found @", count)
-                print(f"{msg:>80}", end="\n")
-                # Write the past INTERVAL frames to the output video
-                for _buffered_frame, index in buffer.get_frames():
+    frames_to_write = set()
+    with tqdm(total=num_frames / INTERVAL) as pb:
+        while reader.cap.isOpened():
+            ret, frames = reader.read()
+            if not ret:
+                break
+            buffer.add_frame((frames[0], count * INTERVAL))
+            logger.debug(f"Count: {count}, {count * INTERVAL}")
+            text = " ".join(map(ocr, frames))
+            if any(keyword.lower() in text.lower() for keyword in keywords):
+                logger.debug(f"\nFOUND KILL @ {count * INTERVAL}\033[0m")
+                current_frame = count * INTERVAL
+                for _buffer in range(current_frame - 240, current_frame + 120):
+                    if _buffer >= 0 and _buffer < num_frames:
+                        frames_to_write.add(_buffer)
+                for bufframe, index in buffer.get_frames():
                     if index not in written_frames:
-                        msg = log_template.format("WRITE", "Wrote frame", index)
                         written_frames.append(index)
-                        msg = log_template.format("SKIPPED", "Duplicate frame", index)
+            """
+            buffer.add_frame((frame, count))
+
+            # Check for killfeed every INTERVAL frames instead of each frame to save time/resources
+            if count % INTERVAL == 0 or num_frames - count == 1:
+                if "Counter" in video_path.name:
+                    kill_detected, name = name_in_killfeed(frame, keywords, killfeed)
+                else:
+                    kill_detected, name = name_in_killfeed(frame, keywords, alt_roi, killfeed)
+                logger.debug(
+                    f"[{count}/{num_frames}] {'\033[32mTrue' if kill_detected else '\033[31mFalse'}\033[0m {name:<15}"
+                )
+                # print(
+                if kill_detected:
+                    msg = log_template.format("DETECT", "Kill found @", count)
+                    logger.debug(f"{msg:>80}")
+                    # Write the past INTERVAL frames to the output video
+                    for _buffered_frame, index in buffer.get_frames():
+                        if index not in written_frames:
+                            msg = log_template.format("WRITE", "Wrote frame", index)
+                            written_frames.append(index)
+                            msg = log_template.format("SKIPPED", "Duplicate frame", index)
+                else:
+                    msg = log_template.format("SKIPPED", "No kill", count)
             else:
-                msg = log_template.format("SKIPPED", "No kill", count)
-        else:
-            msg = log_template.format("INFO", "Current", count)
-        count += 1
-    cv2.destroyAllWindows()
-    return written_frames, props.fps
+                msg = log_template.format("INFO", "Current", count)
+            """
+            count += 1
+            pb.update()
+        cv2.destroyAllWindows()
+    print(f"\033[35mframes_to_write:\033[0m {len(frames_to_write)}")
+    print(frames_to_write)
+    return list(frames_to_write), props.fps
 
 
 def is_video(filepath: str) -> bool:
@@ -189,6 +218,11 @@ def main(input_path: str, keywords: list[str], output_path: str | Path, debug=Fa
         - debug (bool): If True, output a json file containing the frames written and their indices.
 
     """
+    global DEBUG
+
+    DEBUG = debug
+    if debug:
+        logger.setLevel(logging.DEBUG)
 
     input_dir = Path(input_path)
     videos = [
@@ -211,7 +245,9 @@ def main(input_path: str, keywords: list[str], output_path: str | Path, debug=Fa
 
     for vid in videos:
         count += 1
-        print(f"\033[32m============= Processing {count}/{len(videos)} ===============\033[0m")
+        print(
+            f"\033[32m============= Processing {vid.name} - {count}/{len(videos)} ===============\033[0m"
+        )
         try:
             # File path definitions
             output_video = Path(output_folder, f"cv2_{vid.name}")
@@ -230,6 +266,7 @@ def main(input_path: str, keywords: list[str], output_path: str | Path, debug=Fa
             except Exception as e:
                 print(f"Error processing continuous frames {vid.name}: {e}")
                 continue
+
             # Extract continuous frame sequences from set of frames
             segments = sorted(find_continuous_segments(continuous_frames))
             clip = moviepy.VideoFileClip(str(vid))
@@ -276,31 +313,24 @@ def main(input_path: str, keywords: list[str], output_path: str | Path, debug=Fa
     print("Done.")
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("PATH", help="Path to videos", type=str)
-    parser.add_argument(
-        "--output", help="Output folder. Default is {PATH}/opencv_output", default=None
-    )
-    return parser.parse_args()
-
-
 if __name__ == "__main__":
-    module_path = Path(__file__)
-    args = parse_args()
-    keywords_file = Path(module_path.parent, "keywords.txt")
-    if any((not keywords_file.exists(), not keywords_file.read_text())):
-        print("Error: keywords file not found")
-        raise FileNotFoundError
-
-    keywords = [
-        word
-        for word in keywords_file.read_text().splitlines()
-        if not word.startswith(("#", ";", "/"))
-    ]
-
-    input_path = Path(args.PATH)
-    archive_path = Path(str(input_path).replace("ssd", "hdd"))
-    output_path = Path(args.output) if args.output is not None else input_path / "opencv_output"
-
-    main(input_path=input_path, keywords=keywords, output_path=args.output)
+    main(
+        input_path="/tmp/vids/in",
+        output_path="/tmp/vids/out",
+        debug=True,
+        keywords=[
+            "sofunny",
+            "meso",
+            "solunny",
+            "hoff",
+            "ffman",
+            "bartard",
+            "dankniss",
+            "vermeme",
+            "nissev",
+            "knocked",
+            "ocked",
+            "headshot",
+            "you",
+        ],
+    )
