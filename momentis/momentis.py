@@ -159,6 +159,8 @@ def relevant_frames(
                 for _buffer in range(current_frame - 240, current_frame + 120):
                     if _buffer >= 0 and _buffer < num_frames:
                         frames_to_write.add(_buffer)
+                    else:
+                        print(f"\033[31m{_buffer}/{num_frames} is out of range\033[0m")
                 for bufframe, index in buffer.get_frames():
                     if index not in written_frames:
                         written_frames.append(index)
@@ -268,7 +270,7 @@ def main(input_path: str, keywords: list[str], output_path: str | Path, debug=Fa
                 continue
 
             # Extract continuous frame sequences from set of frames
-            segments = sorted(find_continuous_segments(continuous_frames))
+            segments = sorted(find_continuous_segments(sorted(continuous_frames)))
             clip = moviepy.VideoFileClip(str(vid))
             # Get the audio from the original video
             audio = clip.audio
@@ -314,6 +316,26 @@ def main(input_path: str, keywords: list[str], output_path: str | Path, debug=Fa
 
 
 if __name__ == "__main__":
+    main(
+        input_path="/mnt/win_ssd/Users/Joona/Videos/NVIDIA/PLAYERUNKNOWN'S BATTLEGROUNDS",
+        output_path="/tmp/vids/out",
+        debug=True,
+        keywords=[
+            "sofunny",
+            "meso",
+            "solunny",
+            "hoff",
+            "ffman",
+            "bartard",
+            "dankniss",
+            "vermeme",
+            "nissev",
+            "knocked",
+            "ocked",
+            "headshot",
+            "you",
+        ],
+    )
     main(
         input_path="/tmp/vids/in",
         output_path="/tmp/vids/out",
